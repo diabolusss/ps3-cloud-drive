@@ -1,0 +1,10 @@
+source/credentials.h
+**/.vscode
+build
+ps3-cloud-drive.elf
+ps3-cloud-drive.fake.self
+ps3-cloud-drive.gnpdrm.pkg
+PS3CloudDrive-1.1.8.pkg
+
+**.zip
+
