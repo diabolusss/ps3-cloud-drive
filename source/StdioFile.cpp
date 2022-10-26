@@ -46,6 +46,11 @@ s32 StdioFile::fileStatus() const
     return m_ret;
 }
 
+std::string StdioFile::filepath() const
+{
+    return m_path;
+}
+
 void StdioFile::Open( int flags, int chmod )
 {
 	if ( IsOpened() )

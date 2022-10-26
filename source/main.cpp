@@ -96,9 +96,9 @@ const std::string OCTET_MIME    = "application/octet-stream";
 const std::string APP_PATH              = "/dev_hdd0/game/PSCD00001/USRDIR/";
 const std::string appFile               = APP_PATH+"ps3clouddrive.json";
 const std::string appFileBackup         = APP_PATH+"ps3clouddrive.backup";
-const std::string localResourceFile     = APP_PATH+"local.json";
-const std::string remoteResourceFile    = APP_PATH+"remote.json";
-const std::string remoteBackup          = APP_PATH+"remote.backup";
+const std::string LOCAL_RESOURCE_CONFIG_FILENAME     = APP_PATH+"local.json";
+const std::string REMOTE_RESOURCE_CONFIG_FILENAME    = APP_PATH+"remote.json";
+const std::string REMOTE_RESOURCE_CONFIG_BACKUP      = APP_PATH+"remote.backup";
 const std::string queryFields   = "items(fileSize,id,md5Checksum,mimeType,modifiedDate,parents/id,title)";
 
 const std::string APP_TITLE     = "ps3clouddrive";
@@ -134,6 +134,13 @@ double progFuncLastProgress = 0.0;
 int appWidth = 1280;
 int appHeight = 720;
 
+//one
+//  First Time: App never run AND no data on Google Drive
+//two 
+//  Second Time: App ran before AND data possibly exists on Google Drive
+//three
+//  First Time: App is installed on a new system but Data exists on Google Drive 
+//@see initCloudDrive() for details
 std::string userType = "one";
 
 CurlAgent http;
@@ -900,15 +907,15 @@ std::string getParentIdByFolderName(std::string folderName)
 void writeChangesToFile()
 {
     //Backup remote.json before a write to save from any catastrophies
-    StdioFile backup(remoteBackup, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
+    StdioFile backup(REMOTE_RESOURCE_CONFIG_BACKUP, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
     remoteResourceRoot.WriteFile(backup);
     backup.Close();
-    sysFsChmod(remoteBackup.c_str(),0644);
+    sysFsChmod(REMOTE_RESOURCE_CONFIG_BACKUP.c_str(),0644);
     
-    StdioFile file(remoteResourceFile, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
+    StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
     remoteResourceRoot.WriteFile(file);
     file.Close();
-    sysFsChmod(remoteResourceFile.c_str(),0644);
+    sysFsChmod(REMOTE_RESOURCE_CONFIG_FILENAME.c_str(),0644);
     
     debugPrintf("writeChangesToFile: Changes to remote.json written successfully\n");
 }
@@ -1129,7 +1136,7 @@ void uploadChanges()
     if(remoteJsonId == "root")
     {
         Json remJson;
-        remJson = uploadFile(remoteResourceFile,"remote.json",JSON_MIME,rootFolderId);
+        remJson = uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,rootFolderId);
         if(remJson.Has("id"))
         {
             remoteJsonId = remJson["id"].Str();
@@ -1139,7 +1146,7 @@ void uploadChanges()
     else if(syncJson == 1)
     {
         debugPrintf("Updating remote.json on the server...\n" );
-        uploadFile(remoteResourceFile,"remote.json",JSON_MIME,rootFolderId,remoteJsonId);
+        uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,rootFolderId,remoteJsonId);
     }
 }
 
@@ -1341,7 +1348,7 @@ void buildLocalResourceTree()
 {
     std::vector<Json> resourceTree;
 
-    debugPrintf("Building Resource Tree....\n");
+    debugPrintf("Building Local Resource Tree....\n");
 
     sysFSDirent entry;
     s32 fd;
@@ -1355,35 +1362,43 @@ void buildLocalResourceTree()
     // Check how many profiles exists in user's HDD 0000001 etc
     if (sysFsOpendir(path.c_str(), &fd) == 0)
     {
+        debugPrintf("Checking profile home (%s)....\n", path);
+        std::string previousEntry = "";
         while (!sysFsReaddir(fd, &entry, &read) && strlen(entry.d_name) > 0)
         {
-            if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0)
-            {
+            debugPrintf("Reading directory (%s)....\n", entry.d_name);
+            if(strcmp(previousEntry.c_str(),entry.d_name) == 0){
+                debugPrintf("Double reading resource (%s) - breaking loop.\n", entry.d_name);
+                break;
+            }
+
+            previousEntry = entry.d_name;
+            if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0) {
                 continue;
             }
-            else
-            {              
-                entryName.clear();
-                entryName.assign(entry.d_name, strlen(entry.d_name));
-                
-                profileList.Add(entryName);
-                profilePaths.Add(path + "/" + entryName + "/savedata");
-                
-                Json resource;
-                resource.Add("id", Json("nill"));
-                resource.Add("title", Json(entryName));
-                resource.Add("path", Json(path + "/" + entryName + "/savedata"));
-                resource.Add("mimeType", Json(DIR_MIME));
-                resource.Add("parentid", Json(rootFolderId));
-                resource.Add("parentFolder",Json(APP_TITLE));
-                resource.Add("modifiedDate", Json("0"));
-                resource.Add("status",Json("upload"));
+                       
+            entryName.clear();
+            entryName.assign(entry.d_name, strlen(entry.d_name));
+            
+            profileList.Add(entryName);
+            profilePaths.Add(path + "/" + entryName + "/savedata");
+            
+            Json resource;
+            resource.Add("id", Json("nill"));
+            resource.Add("title", Json(entryName));
+            resource.Add("path", Json(path + "/" + entryName + "/savedata"));
+            resource.Add("mimeType", Json(DIR_MIME));
+            resource.Add("parentid", Json(rootFolderId));
+            resource.Add("parentFolder",Json(APP_TITLE));
+            resource.Add("modifiedDate", Json("0"));
+            resource.Add("status",Json("upload"));
 
-                resourceTree.push_back(Json(resource));
-            }
+            resourceTree.push_back(Json(resource));            
         }
         sysFsClosedir(fd);
         fd = -1;
+    }else{
+        debugPrintf("Failed to check profile home %s....\n", path);
     }
 
     Header::iterator k = profileList.begin();
@@ -1394,48 +1409,52 @@ void buildLocalResourceTree()
     // Recursively list all saves under every profile
     while (k != profileList.end())
     {
-        debugPrintf("Entering Save Path...%s\n",l->c_str());
+        debugPrintf("Entering Save Path %s...\n",l->c_str());
         
         if (sysFsOpendir(l->c_str(), &fd) == 0)
         {
+            std::string previousEntry = "";
             while (!sysFsReaddir(fd, &entry, &read) && strlen(entry.d_name) > 0)
             {
-                if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0)
-                {
-                    continue;
+                debugPrintf("Reading directory (%s)....\n", entry.d_name);
+                if(strcmp(previousEntry.c_str(),entry.d_name) == 0){
+                    debugPrintf("Double reading resource (%s) - breaking loop.\n", entry.d_name);
+                    break;
                 }
-                else
-                {
-                    folderList.Add(entry.d_name);
-                    
-                    entryName.clear();
-                    entryName.assign(entry.d_name, strlen(entry.d_name));
 
-                    std::stringstream fPath;
-                    fPath<<*l<<"/"<<entryName;
-                    
-                    pathList.Add(fPath.str());
-                    
-                    //debugPrintf("Save Path Entry...%s\n",entryName.c_str());
-                    
-                    Json resource;
-                    resource.Add("id", Json("nill"));
-                    resource.Add("title", Json(entryName));
-                    resource.Add("path", Json(fPath.str()));
-                    resource.Add("mimeType", Json(DIR_MIME));
-                    resource.Add("parentid", Json("nill"));
-                    resource.Add("parentFolder",Json(k->c_str()));
-                    resource.Add("modifiedDate", Json("0"));
-                    resource.Add("status",Json("upload"));
+                previousEntry = entry.d_name;
+                if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0){ continue; }
 
-                    resourceTree.push_back(Json(resource));
-                }
-            }
+                folderList.Add(entry.d_name);
+                
+                entryName.clear();
+                entryName.assign(entry.d_name, strlen(entry.d_name));
+
+                std::stringstream fPath;
+                fPath<<*l<<"/"<<entryName;
+                
+                pathList.Add(fPath.str());
+                
+                //debugPrintf("Save Path Entry...%s\n",entryName.c_str());
+                
+                Json resource;
+                resource.Add("id", Json("nill"));
+                resource.Add("title", Json(entryName));
+                resource.Add("path", Json(fPath.str()));
+                resource.Add("mimeType", Json(DIR_MIME));
+                resource.Add("parentid", Json("nill"));
+                resource.Add("parentFolder",Json(k->c_str()));
+                resource.Add("modifiedDate", Json("0"));
+                resource.Add("status",Json("upload"));
+
+                resourceTree.push_back(Json(resource));
+                
+            }//END_of loop profile saves
             sysFsClosedir(fd);
             fd = -1;
         }
         ++k,++l;
-    }
+    }//END_of loop profiles
 
     debugPrintf("Directory enumeration complete...listing files inside them...\n");
 
@@ -1445,44 +1464,49 @@ void buildLocalResourceTree()
     // Recursively list all files under every save directory
     while (i != pathList.end())
     {
+        debugPrintf("Reading dir (%s)....\n", i->c_str());
         if (sysFsOpendir(i->c_str(), &fd) == 0)
         {
+            std::string previousEntry = "";
             while (!sysFsReaddir(fd, &entry, &read) && strlen(entry.d_name) > 0)
             {
-                if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0)
-                {
-                    continue;
+                debugPrintf("Reading file (%s)....\n", entry.d_name);
+                if(strcmp(previousEntry.c_str(),entry.d_name) == 0){
+                    debugPrintf("Double reading resource (%s) - breaking loop.\n", entry.d_name);
+                    break;
                 }
-                else
-                {
-                    entryName.clear();
-                    entryName.assign(entry.d_name, strlen(entry.d_name));
 
-                    std::stringstream fPath;
-                    fPath<<*i<<"/"<<entryName;
-                    
-                    //debugPrintf("Entry Path...%s\n",fPath.str().c_str());
-                    
-                    Json resource;
-                    resource.Add("id", Json("nill"));
-                    resource.Add("title", Json(entryName));
-                    resource.Add("path", Json(fPath.str()));
-                    resource.Add("mimeType", Json(OCTET_MIME));
-                    resource.Add("parentFolder",Json(j->c_str()));
-                    resource.Add("parentid", Json("nill"));
-                    resource.Add("modifiedDate", Json("0"));
-                    resource.Add("fileSize",Json("0"));
-                    resource.Add("md5Checksum",Json("0"));
-                    resource.Add("status",Json("upload"));
+                previousEntry = entry.d_name;
+                if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0){ continue;}
+                
+                entryName.clear();
+                entryName.assign(entry.d_name, strlen(entry.d_name));
 
-                    resourceTree.push_back(Json(resource));
-                }
-            }
+                std::stringstream fPath;
+                fPath<<*i<<"/"<<entryName;
+                
+                //debugPrintf("Entry Path...%s\n",fPath.str().c_str());
+                
+                Json resource;
+                resource.Add("id", Json("nill"));
+                resource.Add("title", Json(entryName));
+                resource.Add("path", Json(fPath.str()));
+                resource.Add("mimeType", Json(OCTET_MIME));
+                resource.Add("parentFolder",Json(j->c_str()));
+                resource.Add("parentid", Json("nill"));
+                resource.Add("modifiedDate", Json("0"));
+                resource.Add("fileSize",Json("0"));
+                resource.Add("md5Checksum",Json("0"));
+                resource.Add("status",Json("upload"));
+
+                resourceTree.push_back(Json(resource));
+                
+            }//END_of loop files in dirs
             sysFsClosedir(fd);
             fd = -1;
         }
         ++i;++j;
-    }
+    }//END_of loop directories
     
     //Check for Existence of PS1 and PS2 memory cards
     if(pathExists("/dev_hdd0/savedata"))
@@ -1491,48 +1515,52 @@ void buildLocalResourceTree()
         {
             if (sysFsOpendir("/dev_hdd0/savedata/vmc", &fd) == 0)
             {
+                std::string previousEntry = "";
                 while (!sysFsReaddir(fd, &entry, &read) && strlen(entry.d_name) > 0)
                 {
-                    if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0)
-                    {
-                        continue;
+                    debugPrintf("Reading directory (%s)....\n", entry.d_name);
+                    if(strcmp(previousEntry.c_str(),entry.d_name) == 0){
+                        debugPrintf("Double reading resource (%s) - breaking loop.\n", entry.d_name);
+                        break;
                     }
-                    else
-                    {              
-                        entryName.clear();
-                        entryName.assign(entry.d_name, strlen(entry.d_name));
-                        
-                        debugPrintf("Memcard%s\n",entryName.c_str());
 
-                        Json resource;
-                        resource.Add("id", Json("nill"));
-                        resource.Add("title", Json(entryName));
-                        resource.Add("path", Json("/dev_hdd0/savedata/vmc/"+entryName));
-                        resource.Add("mimeType", Json(OCTET_MIME));
-                        resource.Add("parentid", Json(rootFolderId));
-                        resource.Add("parentFolder",Json(APP_TITLE));
-                        resource.Add("modifiedDate", Json("0"));
-                        resource.Add("status",Json("upload"));
+                    previousEntry = entry.d_name;
+                    if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0){ continue;}
+                                                    
+                    entryName.clear();
+                    entryName.assign(entry.d_name, strlen(entry.d_name));
+                    
+                    debugPrintf("Memcard%s\n",entryName.c_str());
 
-                        resourceTree.push_back(Json(resource));
-                    }
-                }
+                    Json resource;
+                    resource.Add("id", Json("nill"));
+                    resource.Add("title", Json(entryName));
+                    resource.Add("path", Json("/dev_hdd0/savedata/vmc/"+entryName));
+                    resource.Add("mimeType", Json(OCTET_MIME));
+                    resource.Add("parentid", Json(rootFolderId));
+                    resource.Add("parentFolder",Json(APP_TITLE));
+                    resource.Add("modifiedDate", Json("0"));
+                    resource.Add("status",Json("upload"));
+
+                    resourceTree.push_back(Json(resource));
+                    
+                }//END_of loop directory
                 sysFsClosedir(fd);
                 fd = -1;
             }
         }
     }
 
-    debugPrintf("Resource Tree built, writing to Resource Json\n");
+    debugPrintf("Resource Tree built, writing local.json\n");
 
     // Overwrite local.json every time
-    StdioFile file(localResourceFile, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
+    StdioFile file(LOCAL_RESOURCE_CONFIG_FILENAME, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
 
     localResourceRoot.Add("data",Json(resourceTree));
     localResourceRoot.WriteFile(file);
 
     file.Close();
-    sysFsChmod(localResourceFile.c_str(),0644);
+    sysFsChmod(LOCAL_RESOURCE_CONFIG_FILENAME.c_str(),0644);
 
     debugPrintf("Resource file has been written successfully...\n");
 }
@@ -1552,13 +1580,13 @@ int initCloudDrive(void *arg)
     
     if (authStatus == "not_found")
     {
-        debugPrintf("User is not authenticated, starting Authentication...\n");
+        debugPrintf("User is not authenticated (userType 1), starting Authentication...\n");
         authenticateUser();
     }
     else
     {
         userType = "two";
-        debugPrintf("Possible Token Read from file:  %s \n", authStatus.c_str());
+        debugPrintf("Possible Token Read from file (userType 2):  %s \n", authStatus.c_str());
 
         authToken.setRefreshToken(authStatus);
         if (authToken.Refresh() != "valid")
@@ -1587,7 +1615,7 @@ int initCloudDrive(void *arg)
     if(rootResource.Has("id"))
     {
         rootFolderId = rootResource["id"].Str();
-        debugPrintf("User has previous data on Google Drive with id %s\n",rootFolderId.c_str());
+        debugPrintf("User has previous data on Google Drive (userType 3) with id %s\n",rootFolderId.c_str());
         if(userType == "one") userType = "three";
     }
     else
@@ -1609,7 +1637,7 @@ int initCloudDrive(void *arg)
     }
     
     buildLocalResourceTree();
-    
+    debugPrintf("Continuing (userType=%s)....\n", userType.c_str());
     //NOTE: LRT = Local Resource Tree and RRT= Remote Resource Tree
     
     //First Time: App never run AND no data on Google Drive
@@ -1622,11 +1650,11 @@ int initCloudDrive(void *arg)
     //DONE: Upload remote.json to Google Drive
     if(userType == "one")
     {
-        StdioFile file(localResourceFile);
+        StdioFile file(LOCAL_RESOURCE_CONFIG_FILENAME);
         remoteResourceRoot = Json::ParseFile(file);
         file.Close();
 
-        StdioFile file2(remoteResourceFile);
+        StdioFile file2(REMOTE_RESOURCE_CONFIG_FILENAME);
         remoteResourceRoot.WriteFile(file2);
         file.Close();
 
@@ -1645,14 +1673,20 @@ int initCloudDrive(void *arg)
     //TODO: Upload RRT to Google Drive
     if(userType == "two")
     {
-        StdioFile file(remoteResourceFile);
-        remoteResourceRoot = Json::ParseFile(file);
-        file.Close();
-        
-        detectChanges();
-        
-        uploadChanges();
-        downloadChanges();
+        debugPrintf("Reading local remote.json config.\n");
+        StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
+        if(file.Exists() == true){		
+            remoteResourceRoot = Json::ParseFile(file);
+            file.Close();
+            
+            detectChanges();
+            
+            uploadChanges();
+            downloadChanges();
+        }else{
+            debugPrintf("File %s doesnt exist\n", file.filepath().c_str());
+            userType = "three";
+        }
     }
 
     //First Time: App is installed on a new system but Data exists on Google Drive
@@ -1667,9 +1701,9 @@ int initCloudDrive(void *arg)
         {
             remoteJsonId = remoteJson["id"].Str();
             debugPrintf("Downloading remote.json from Google Drive with id %s\n",remoteJsonId.c_str());
-            downloadFile(remoteResourceFile, remoteJsonId);
+            downloadFile(REMOTE_RESOURCE_CONFIG_FILENAME, remoteJsonId);
             
-            StdioFile file(remoteResourceFile);
+            StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
             remoteResourceRoot = Json::ParseFile(file);
             file.Close();
             

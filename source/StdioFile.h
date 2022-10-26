@@ -52,6 +52,7 @@ public :
         s32 IsDir();
 	
 	void Chmod(int chmod );
+	std::string filepath() const;
 	
 private :
 	void Open( int flags, int chmod ) ;

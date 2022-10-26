@@ -347,8 +347,12 @@ Json Json::Parse( const std::string& str )
 
 Json Json::ParseFile( StdioFile& file )
 {
-	struct json_tokener *tok = ::json_tokener_new() ;
-	
+
+	if(file.Exists() == false){
+		debugPrintf("File %s doesnt exist\n", file.filepath().c_str());
+		return Json( 0, NotOwned() );
+	}
+	struct json_tokener *tok = ::json_tokener_new() ;	
 	struct json_object *json = 0 ;
 	
 	char buf[1024] ;
