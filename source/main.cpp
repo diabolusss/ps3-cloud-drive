@@ -55,17 +55,53 @@
 #include "Download.h"
 #include "log.h"
 
-const std::string jsonMime = "application/json";
-const std::string folderMime = "application/vnd.google-apps.folder";
-const std::string octetMime = "application/octet-stream";
-const std::string appPath = "/dev_hdd0/game/PSCD00001/USRDIR/";
+/*  Function declarations  */
+    void get_free_memory();
+    bool pathExists(std::string pathToCheck);
+
+    void sysevent_callback(u64 status, u64 param, void *userdata);
+    static void dialog_handler(msgButton button, void *usrData);
+    void draw_surface(SDL_Surface *destination, SDL_Surface *source, int x, int y);
+    SDL_Surface *Load_Image(std::string filePath);
+
+
+    bool CheckRetry(long response);
+    Json::Array getResourcesUnderFolder(std::string parentId);
+    Json checkIfRemoteResourceExists(std::string resourceTitle, std::string mimeType, std::string parentId);
+
+    void storeConfig();
+    std::string isUserAuthenticated();
+
+    std::string constructMetaData(std::string title, std::string mimeType, std::string parentid);
+    int transferProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
+    void downloadDirectory(std::string path);
+    bool downloadFile(std::string localPath, std::string fileId);
+    void downloadChanges();
+    Json uploadFile(std::string path, std::string filename, std::string mimeType, std::string parentId, std::string fileId);
+    Json uploadDirectory(std::string dirName, std::string parentId);
+
+    std::string getParentIdByFolderName(std::string folderName);
+    void writeChangesToFile();
+    void uploadChanges();
+    std::string calculateMD5Checksum(std::string fpath);   
+    void detectChanges();
+    std::string authenticateUser();
+    void buildRemoteResourceTree();
+    void buildLocalResourceTree();
+    int initCloudDrive(void *arg);
+
+
+const std::string JSON_MIME = "application/json";
+const std::string DIR_MIME = "application/vnd.google-apps.folder";
+const std::string OCTET_MIME = "application/octet-stream";
+const std::string APP_PATH = "/dev_hdd0/game/PSCD00001/USRDIR/";
 const std::string appFile = "/dev_hdd0/game/PSCD00001/USRDIR/ps3clouddrive.json";
 const std::string appFileBackup = "/dev_hdd0/game/PSCD00001/USRDIR/ps3clouddrive.backup";
 const std::string localResourceFile = "/dev_hdd0/game/PSCD00001/USRDIR/local.json";
 const std::string remoteResourceFile = "/dev_hdd0/game/PSCD00001/USRDIR/remote.json";
 const std::string remoteBackup = "/dev_hdd0/game/PSCD00001/USRDIR/remote.backup";
 const std::string queryFields = "items(fileSize,id,md5Checksum,mimeType,modifiedDate,parents/id,title)";
-const std::string app_title = "ps3clouddrive";
+const std::string APP_TITLE = "ps3clouddrive";
 
 const std::string client_id     = GOOGLE_API_ID;
 const std::string client_secret = GOOGLE_API_KEY;
@@ -107,6 +143,115 @@ typedef struct {
 	uint32_t avail;
 } _meminfo;
 _meminfo meminfo;
+
+
+int main(int argc, char **argv)
+{
+    padInfo padinfo;
+    padData paddata;
+    SDL_Thread *thread = NULL;
+
+    std::string imagePath;
+    std::string FontPath = APP_PATH+"font.ttf";
+
+    netInitialize();
+    debugInit();
+
+    SDL_Init(SDL_INIT_EVERYTHING);
+    IMG_Init(IMG_INIT_PNG);
+    TTF_Init();
+
+    videoState state;
+    videoGetState(0, 0, &state);
+    videoResolution res;
+    videoGetResolution(state.displayMode.resolution, &res);
+
+    debugPrintf("Resolution %u,%u\n", res.width, res.height);
+
+    appWidth = res.width;
+    appHeight = res.height;
+
+    switch (appHeight)
+    {
+    case 1080:
+        imagePath = APP_PATH+"bg.png";
+        break;
+    case 720:
+        imagePath = APP_PATH+"bg-720.png";
+        break;
+    case 480:
+        imagePath = APP_PATH+"bg-480.png";
+        break;
+    case 576:
+        imagePath = APP_PATH+"bg-576.png";
+        break;
+    default:
+        imagePath = APP_PATH+"bg.png";
+        break;
+    }
+
+    screen = SDL_SetVideoMode(appWidth, appHeight, 32, SDL_SWSURFACE | SDL_DOUBLEBUF | SDL_FULLSCREEN);
+
+    image = Load_Image(imagePath);
+    draw_surface(screen, image, 0, 0);
+
+    Sans = TTF_OpenFont(FontPath.c_str(), 20.0);
+
+    thread = SDL_CreateThread(initCloudDrive, NULL);
+
+    sysUtilRegisterCallback(SYSUTIL_EVENT_SLOT0, sysevent_callback, NULL);
+
+    ioPadInit(7);
+
+    dialog_action = 0;
+    dialog_type = static_cast<msgType>(MSG_DIALOG_MUTE_ON | MSG_DIALOG_DOUBLE_PROGRESSBAR);
+
+    while (exitapp == 0)
+    {
+        sysUtilCheckCallback();
+
+        if (xmbopen != 1)
+        {
+            ioPadGetInfo(&padinfo);
+            for (int i = 0; i < MAX_PADS; i++)
+            {
+                if (padinfo.status[i])
+                {
+                    ioPadGetData(i, &paddata);
+                    if (paddata.BTN_CROSS)
+                    {
+                        debugPrintf("Quit Called...%d\n", exitapp);
+                        if (syncing == 0)
+                        {
+                            dialog_action = 2;
+                            exitapp = 1; // Quit application
+                        }
+                    }
+                }
+            }
+        }
+        SDL_Flip(screen);
+    }
+
+    debugPrintf("The application exited...%d\n", exitapp);
+
+    msgDialogAbort();
+
+    SDL_KillThread(thread);
+    SDL_FreeSurface(image);
+    SDL_FreeSurface(screen);
+    TTF_CloseFont(Sans);
+
+    IMG_Quit();
+    TTF_Quit();
+    SDL_Quit();
+
+    debugClose();
+    netDeinitialize();
+    ioPadEnd();
+
+    return 0;
+}
 
 void get_free_memory()
 {
@@ -489,7 +634,7 @@ void downloadChanges()
         
         if(resource["status"].Str() == "synced")
         {
-            if(resource["mimeType"].Str() == folderMime)
+            if(resource["mimeType"].Str() == DIR_MIME)
             {
                 sysFSStat entry;
                 result = resource["path"].Str();
@@ -540,7 +685,7 @@ void downloadChanges()
         
         if(resource["status"].Str() == "synced")
         {
-            if(resource["mimeType"].Str() != folderMime)
+            if(resource["mimeType"].Str() != DIR_MIME)
             {
                 sysFSStat entry;
                 result = resource["path"].Str();
@@ -695,7 +840,7 @@ Json uploadDirectory(std::string dirName, std::string parentId)
     hdr.Add("Content-Type: application/json");
     hdr.Add("Expect:" );
 
-    std::string meta = constructMetaData(dirName, folderMime, parentId);
+    std::string meta = constructMetaData(dirName, DIR_MIME, parentId);
 
     JsonResponse resp;
 
@@ -727,7 +872,7 @@ Json uploadDirectory(std::string dirName, std::string parentId)
 std::string getParentIdByFolderName(std::string folderName)
 {
     std::string result = "not_found";
-    if(folderName == app_title)
+    if(folderName == APP_TITLE)
     {
         result = rootFolderId;
     }
@@ -737,7 +882,7 @@ std::string getParentIdByFolderName(std::string folderName)
         for(int i=0; i < remSize; i++)
         {
             Json resource = remoteResourceRoot["data"][i];
-            if(resource["mimeType"].Str() == folderMime)
+            if(resource["mimeType"].Str() == DIR_MIME)
             {
                 if(resource["title"].Str() == folderName)
                 {
@@ -814,7 +959,7 @@ void uploadChanges()
         
         if(resource["status"].Str() == "upload")
         {
-            if(resource["mimeType"].Str() == folderMime)
+            if(resource["mimeType"].Str() == DIR_MIME)
             {
                 result = getParentIdByFolderName(resource["parentFolder"].Str());
                 
@@ -880,7 +1025,7 @@ void uploadChanges()
         
         if(resource["status"].Str() == "upload")
         {
-            if(resource["mimeType"].Str() != folderMime)
+            if(resource["mimeType"].Str() != DIR_MIME)
             {
                 result = getParentIdByFolderName(resource["parentFolder"].Str());
              
@@ -888,7 +1033,7 @@ void uploadChanges()
                 {
                     debugPrintf("uploadChanges: Creating file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
-                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),octetMime,result);
+                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result);
                     
                     if(!obj.Has("id"))
                     {
@@ -931,7 +1076,7 @@ void uploadChanges()
         }
         else if(resource["status"].Str() == "update")
         {
-            if(resource["mimeType"].Str() != folderMime)
+            if(resource["mimeType"].Str() != DIR_MIME)
             {
                 result = getParentIdByFolderName(resource["parentFolder"].Str());
              
@@ -939,7 +1084,7 @@ void uploadChanges()
                 {
                     debugPrintf("uploadChanges: Re-visioning file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
-                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),octetMime,result, resource["id"].Str());
+                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result, resource["id"].Str());
 
                     if(!obj.Has("id"))
                     {
@@ -984,7 +1129,7 @@ void uploadChanges()
     if(remoteJsonId == "root")
     {
         Json remJson;
-        remJson = uploadFile(remoteResourceFile,"remote.json",jsonMime,rootFolderId);
+        remJson = uploadFile(remoteResourceFile,"remote.json",JSON_MIME,rootFolderId);
         if(remJson.Has("id"))
         {
             remoteJsonId = remJson["id"].Str();
@@ -994,7 +1139,7 @@ void uploadChanges()
     else if(syncJson == 1)
     {
         debugPrintf("Updating remote.json on the server...\n" );
-        uploadFile(remoteResourceFile,"remote.json",jsonMime,rootFolderId,remoteJsonId);
+        uploadFile(remoteResourceFile,"remote.json",JSON_MIME,rootFolderId,remoteJsonId);
     }
 }
 
@@ -1049,7 +1194,7 @@ void detectChanges()
             if(lres["path"].Str() == rres["path"].Str())
             {
                 found = true;
-                if(lres["mimeType"].Str() != folderMime)
+                if(lres["mimeType"].Str() != DIR_MIME)
                 {
                     if(rres["status"].Str() == "synced")
                     {
@@ -1161,7 +1306,7 @@ void buildRemoteResourceTree()
 {
     std::vector<Json> resourceTree;
     std::vector<std::string> foldersToTraverse;
-    Json resourceObject = checkIfRemoteResourceExists(app_title,folderMime,rootFolderId);
+    Json resourceObject = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,rootFolderId);
     if(resourceObject.Has("id"))
     {
         resourceTree.push_back(Json(resourceObject));
@@ -1174,7 +1319,7 @@ void buildRemoteResourceTree()
                 for ( Json::Array::iterator i = tempArray.begin() ; i != tempArray.end() ; ++i )
                 {
                     Json::Object tmpObject = i->AsObject();
-                    if(tmpObject["mimeType"].Str() == folderMime) foldersToTraverse.push_back(tmpObject["id"].Str());
+                    if(tmpObject["mimeType"].Str() == DIR_MIME) foldersToTraverse.push_back(tmpObject["id"].Str());
                     resourceTree.push_back(Json(i->AsObject()));
                 }          
             }
@@ -1228,9 +1373,9 @@ void buildLocalResourceTree()
                 resource.Add("id", Json("nill"));
                 resource.Add("title", Json(entryName));
                 resource.Add("path", Json(path + "/" + entryName + "/savedata"));
-                resource.Add("mimeType", Json(folderMime));
+                resource.Add("mimeType", Json(DIR_MIME));
                 resource.Add("parentid", Json(rootFolderId));
-                resource.Add("parentFolder",Json(app_title));
+                resource.Add("parentFolder",Json(APP_TITLE));
                 resource.Add("modifiedDate", Json("0"));
                 resource.Add("status",Json("upload"));
 
@@ -1277,7 +1422,7 @@ void buildLocalResourceTree()
                     resource.Add("id", Json("nill"));
                     resource.Add("title", Json(entryName));
                     resource.Add("path", Json(fPath.str()));
-                    resource.Add("mimeType", Json(folderMime));
+                    resource.Add("mimeType", Json(DIR_MIME));
                     resource.Add("parentid", Json("nill"));
                     resource.Add("parentFolder",Json(k->c_str()));
                     resource.Add("modifiedDate", Json("0"));
@@ -1322,7 +1467,7 @@ void buildLocalResourceTree()
                     resource.Add("id", Json("nill"));
                     resource.Add("title", Json(entryName));
                     resource.Add("path", Json(fPath.str()));
-                    resource.Add("mimeType", Json(octetMime));
+                    resource.Add("mimeType", Json(OCTET_MIME));
                     resource.Add("parentFolder",Json(j->c_str()));
                     resource.Add("parentid", Json("nill"));
                     resource.Add("modifiedDate", Json("0"));
@@ -1363,9 +1508,9 @@ void buildLocalResourceTree()
                         resource.Add("id", Json("nill"));
                         resource.Add("title", Json(entryName));
                         resource.Add("path", Json("/dev_hdd0/savedata/vmc/"+entryName));
-                        resource.Add("mimeType", Json(octetMime));
+                        resource.Add("mimeType", Json(OCTET_MIME));
                         resource.Add("parentid", Json(rootFolderId));
-                        resource.Add("parentFolder",Json(app_title));
+                        resource.Add("parentFolder",Json(APP_TITLE));
                         resource.Add("modifiedDate", Json("0"));
                         resource.Add("status",Json("upload"));
 
@@ -1438,7 +1583,7 @@ int initCloudDrive(void *arg)
     msgDialogOpen2(dialog_type, "Performing Sync...", dialog_handler, NULL, NULL);
     
     //If user new but remote data exists
-    Json rootResource = checkIfRemoteResourceExists(app_title,folderMime,"root");
+    Json rootResource = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,"root");
     if(rootResource.Has("id"))
     {
         rootFolderId = rootResource["id"].Str();
@@ -1449,7 +1594,7 @@ int initCloudDrive(void *arg)
     {
         debugPrintf("User has no previous data on Google Drive\n");
         Json rtId;
-        rtId = uploadDirectory(app_title,"root");
+        rtId = uploadDirectory(APP_TITLE,"root");
         
         if(rtId.Has("id"))
         {
@@ -1516,7 +1661,7 @@ int initCloudDrive(void *arg)
     //TODO: Revert to Second Time scenario
     if(userType == "three")
     {
-        Json remoteJson = checkIfRemoteResourceExists("remote.json",jsonMime,rootFolderId);
+        Json remoteJson = checkIfRemoteResourceExists("remote.json",JSON_MIME,rootFolderId);
         
         if(remoteJson.Has("id"))
         {
@@ -1555,113 +1700,5 @@ int initCloudDrive(void *arg)
     
     exitapp = 1;
     
-    return 0;
-}
-
-int main(int argc, char **argv)
-{
-    padInfo padinfo;
-    padData paddata;
-    SDL_Thread *thread=NULL;
-    
-    std::string imagePath;
-    char FontPath[]="/dev_hdd0/game/PSCD00001/USRDIR/font.ttf";
-       
-    netInitialize();
-    debugInit();
-    
-    SDL_Init(SDL_INIT_EVERYTHING);
-    IMG_Init(IMG_INIT_PNG);
-    TTF_Init();
-    
-    videoState state;
-    videoGetState(0, 0, &state);
-    videoResolution res;
-    videoGetResolution(state.displayMode.resolution,&res);
-    
-    debugPrintf("Resolution %u,%u\n",res.width,res.height);
-    
-    appWidth = res.width;
-    appHeight = res.height;
-    
-    switch(appHeight)
-    {
-        case 1080:
-            imagePath = "/dev_hdd0/game/PSCD00001/USRDIR/bg.png";
-            break;
-        case 720:
-            imagePath ="/dev_hdd0/game/PSCD00001/USRDIR/bg-720.png";
-            break;
-        case 480:
-            imagePath ="/dev_hdd0/game/PSCD00001/USRDIR/bg-480.png";
-            break;
-        case 576:
-            imagePath ="/dev_hdd0/game/PSCD00001/USRDIR/bg-576.png";
-            break;
-        default:
-            imagePath = "/dev_hdd0/game/PSCD00001/USRDIR/bg.png";
-            break;
-    }
-    
-    screen = SDL_SetVideoMode(appWidth, appHeight, 32 ,SDL_SWSURFACE|SDL_DOUBLEBUF|SDL_FULLSCREEN);
-
-    image = Load_Image(imagePath);
-    draw_surface(screen, image, 0,0);
-
-    Sans = TTF_OpenFont( FontPath , 20.0 );
-    
-    thread = SDL_CreateThread(initCloudDrive, NULL);
-    
-    sysUtilRegisterCallback(SYSUTIL_EVENT_SLOT0, sysevent_callback, NULL);
-    
-    ioPadInit(7);
-    
-    dialog_action = 0;
-    dialog_type = static_cast<msgType>(MSG_DIALOG_MUTE_ON | MSG_DIALOG_DOUBLE_PROGRESSBAR);
-    
-    while(exitapp == 0)
-    {
-        sysUtilCheckCallback();
-
-        if(xmbopen != 1)
-        {
-            ioPadGetInfo(&padinfo);
-            for(int i = 0; i < MAX_PADS; i++)
-            {
-                if(padinfo.status[i])
-                {
-                    ioPadGetData(i, &paddata);
-                    if(paddata.BTN_CROSS)
-                    {
-                        debugPrintf("Quit Called...%d\n",exitapp);
-                        if(syncing == 0)
-                        {
-                            dialog_action = 2;
-                            exitapp = 1; //Quit application
-                        }
-                    }
-                }
-            }
-        }
-        SDL_Flip(screen);
-    }
-    
-    debugPrintf("The application exited...%d\n",exitapp);
-
-    msgDialogAbort();
-    
-    SDL_KillThread(thread);
-    SDL_FreeSurface(image);
-    SDL_FreeSurface(screen);
-    TTF_CloseFont(Sans);
-
-    IMG_Quit();
-    TTF_Quit();
-    SDL_Quit();
-    
-    debugClose();
-    netDeinitialize();
-    ioPadEnd();
-
     return 0;
 }
