@@ -6,8 +6,12 @@
 *					  http://nzhawk.mezoka.com/pslightlogger
 */
 //EDIT THESE VALUES TO SUIT YOUR NETWORK/////////
-#define PCIP		"10.0.0.2"			/////
-#define PCPORT		18194					/////
+#define PCIP		"127.0.0.1"			/////
+#define PCPORT		18194				/////
+// 
+// Use netcat to receive the results on your PC:
+// UDP: nc -u -l -p 18194
+// For some versions of netcat the -p option may need to be removed.
 /////////////////////////////////////////////////
 /////////////////////////////////////////////////
 
@@ -23,11 +27,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-// Configure these (especially the IP) to your own setup.
-// Use netcat to receive the results on your PC:
-// UDP: nc -u -l -p 4000
-// For some versions of netcat the -p option may need to be removed.
 
 #define INITSTRING	"Logging Started\n"
 #define BYESTRING	"Logging Stopped\n"

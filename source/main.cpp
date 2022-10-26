@@ -90,18 +90,18 @@
     void buildLocalResourceTree();
     int initCloudDrive(void *arg);
 
+const std::string JSON_MIME     = "application/json";
+const std::string DIR_MIME      = "application/vnd.google-apps.folder";
+const std::string OCTET_MIME    = "application/octet-stream";
+const std::string APP_PATH              = "/dev_hdd0/game/PSCD00001/USRDIR/";
+const std::string appFile               = APP_PATH+"ps3clouddrive.json";
+const std::string appFileBackup         = APP_PATH+"ps3clouddrive.backup";
+const std::string localResourceFile     = APP_PATH+"local.json";
+const std::string remoteResourceFile    = APP_PATH+"remote.json";
+const std::string remoteBackup          = APP_PATH+"remote.backup";
+const std::string queryFields   = "items(fileSize,id,md5Checksum,mimeType,modifiedDate,parents/id,title)";
 
-const std::string JSON_MIME = "application/json";
-const std::string DIR_MIME = "application/vnd.google-apps.folder";
-const std::string OCTET_MIME = "application/octet-stream";
-const std::string APP_PATH = "/dev_hdd0/game/PSCD00001/USRDIR/";
-const std::string appFile = "/dev_hdd0/game/PSCD00001/USRDIR/ps3clouddrive.json";
-const std::string appFileBackup = "/dev_hdd0/game/PSCD00001/USRDIR/ps3clouddrive.backup";
-const std::string localResourceFile = "/dev_hdd0/game/PSCD00001/USRDIR/local.json";
-const std::string remoteResourceFile = "/dev_hdd0/game/PSCD00001/USRDIR/remote.json";
-const std::string remoteBackup = "/dev_hdd0/game/PSCD00001/USRDIR/remote.backup";
-const std::string queryFields = "items(fileSize,id,md5Checksum,mimeType,modifiedDate,parents/id,title)";
-const std::string APP_TITLE = "ps3clouddrive";
+const std::string APP_TITLE     = "ps3clouddrive";
 
 const std::string client_id     = GOOGLE_API_ID;
 const std::string client_secret = GOOGLE_API_KEY;
