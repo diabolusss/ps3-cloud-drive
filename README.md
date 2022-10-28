@@ -14,6 +14,6 @@ Changes:
 
 For more info on ps3-cloud-drive itself, check its [original readme](README_Original.md).
 
-Note
+## Note
 Installing Automatically Converted CA Certificates from mozilla.org
- Place Mozilla [cacert.pem](https://curl.haxx.se/ca/cacert.pem) into apps USERDIR.
+ - Place Mozilla [cacert.pem](https://curl.haxx.se/ca/cacert.pem) into apps USERDIR.
