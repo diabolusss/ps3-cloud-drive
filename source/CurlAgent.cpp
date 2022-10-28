@@ -59,7 +59,8 @@ size_t ReadFileCallback(void *ptr, size_t size, size_t nmemb, StdioFile *file)
 	return count ;
 }
 
-/*int debug_cb ( CURL *handle, curl_infotype type, char *data, size_t size, void *userp) 
+#ifdef _DEBUG
+int debug_cb ( CURL *handle, curl_infotype type, char *data, size_t size, void *userp) 
 {
     switch ( type ) 
     {
@@ -68,17 +69,16 @@ size_t ReadFileCallback(void *ptr, size_t size, size_t nmemb, StdioFile *file)
                 break;
         }
         case CURLINFO_HEADER_IN: {
-                debugPrintf("RESPONSE: %s", data);
+                debugPrintf("RESPONSE HDR: %s", data);
                 break;
         }
         case CURLINFO_HEADER_OUT: { //There is no null-terminator on this one !
-                size_t i;
-                debugPrintf("REQUEST: \n");
-                for ( i = 0; i < size; i ++) debugPrintf("%c", data[i]);
+                debugPrintf("REQUEST HDR: \n");
+                for (size_t i = 0; i < size; i ++) debugPrintf("%c", data[i]);
                 break;
         }
         case CURLINFO_DATA_IN: {
-                debugPrintf("RECIEVED: %d bytes\n", size);
+                debugPrintf("RECEIVED: %d bytes\n", size);
                 break;
         }
         case CURLINFO_DATA_OUT: { 
@@ -86,7 +86,7 @@ size_t ReadFileCallback(void *ptr, size_t size, size_t nmemb, StdioFile *file)
                 break;
         }
         case CURLINFO_SSL_DATA_IN: {
-                debugPrintf("SSL RECIEVED: %d bytes\n", size);
+                debugPrintf("SSL RECEIVED: %d bytes\n", size);
                 break;
         }
         case CURLINFO_SSL_DATA_OUT: { 
@@ -101,7 +101,8 @@ size_t ReadFileCallback(void *ptr, size_t size, size_t nmemb, StdioFile *file)
             return 0;
     }
     return 0;
-}*/
+}
+#endif /*_DEBUG*/
 
 struct CurlAgent::Impl
 {
@@ -122,7 +123,10 @@ void CurlAgent::Init()
     //::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYHOST, 2L);
 	::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYPEER, FALSE);
     ::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYHOST, FALSE);
-    ::curl_easy_setopt(m_pimpl->curl, CURLOPT_CAINFO, "/dev_hdd0/game/PSCD00001/USRDIR/cert.cer");
+    ::curl_easy_setopt(m_pimpl->curl, CURLOPT_CAINFO, "/dev_hdd0/game/PSCD00001/USRDIR/cacert.pem");  // path to Certificate Authority (CA) bundle
+                                                                                                    // If CURLOPT_SSL_VERIFYPEER is zero 
+                                                                                                    //  and you avoid verifying the server's certificate, 
+                                                                                                    //  CURLOPT_CAINFO need not even indicate an accessible file.
     ::curl_easy_setopt(m_pimpl->curl, CURLOPT_HEADERFUNCTION, &CurlAgent::HeaderCallback);
     ::curl_easy_setopt(m_pimpl->curl, CURLOPT_WRITEHEADER, this);
     ::curl_easy_setopt(m_pimpl->curl, CURLOPT_HEADER, 0L);
@@ -172,8 +176,10 @@ long CurlAgent::ExecCurl(
     ::curl_easy_setopt(curl, CURLOPT_ENCODING, "gzip,deflate");
     ::curl_easy_setopt(curl, CURLOPT_USERAGENT, "PS3 Cloud Drive (gzip)");
     ::curl_easy_setopt(curl, CURLOPT_SSL_CIPHER_LIST, "TLS-RSA-WITH-AES-128-GCM-SHA256");
-    //::curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-    //::curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, debug_cb);
+    #ifdef _DEBUG
+    ::curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); //the DEBUGFUNCTION has no effect until we enable VERBOSE
+    ::curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, debug_cb);
+    #endif
 
     SetHeader(hdr);
 
@@ -268,7 +274,7 @@ long CurlAgent::Get(
                     Receivable *dest,
                     const Header& hdr)
 {
-    debugPrintf("HTTP GET %s\n", url.c_str() ) ;
+    debugPrintf("HTTP GET %s\n", Unescape(url).c_str() ) ;
     Init();
 
     // set get specific options
@@ -302,7 +308,7 @@ long CurlAgent::Post(
                      Receivable *dest,
                      const Header& hdr)
 {
-    debugPrintf("HTTP POST %s with %s\n", url.c_str(), data.c_str() ) ;
+    debugPrintf("HTTP POST %s with %s\n", Unescape(url).c_str(), data.c_str() ) ;
 
     Init();
     CURL *curl = m_pimpl->curl;

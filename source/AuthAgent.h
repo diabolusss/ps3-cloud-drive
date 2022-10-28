@@ -32,7 +32,7 @@
 class AuthAgent : public Agent
 {
 	public :
-		AuthAgent( const OAuth2& auth, std::auto_ptr<Agent> real_agent ) ;
+		AuthAgent( const OAuth2& auth, std::shared_ptr<Agent> real_agent ) ;
 
 		long Put(
 			const std::string&	url,
@@ -78,5 +78,5 @@ class AuthAgent : public Agent
 	
 	private :
 		OAuth2						m_auth ;
-		const std::auto_ptr<Agent>	m_agent ;
+		const std::shared_ptr<Agent>	m_agent ;
 } ;

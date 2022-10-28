@@ -23,7 +23,7 @@
 #include <cassert>
 #include <iostream>
 
-AuthAgent::AuthAgent( const OAuth2& auth, std::auto_ptr<Agent> real_agent ) :
+AuthAgent::AuthAgent( const OAuth2& auth, std::shared_ptr<Agent> real_agent ) :
 	m_auth	( auth ),
 	m_agent	( real_agent )
 {
