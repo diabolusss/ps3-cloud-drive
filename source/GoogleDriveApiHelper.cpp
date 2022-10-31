@@ -119,7 +119,7 @@ void downloadChanges(int *dialog_action)
                     msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 0);
                     msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX1, resource["path"].Str().c_str());
 
-                    downloadDirectory(result);
+                    createDownloadDir(result);
                     
                     msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1,100);
                     

@@ -50,6 +50,7 @@
 #include "Download.h"
 #include "log.h"
 #include "main.h"
+#include "MainHelper.h"
 
 #include "GoogleDriveApiHelper.h"
 
@@ -65,11 +66,10 @@
     void storeConfig();
     std::string isUserAuthenticated();
 
-    std::string getParentIdByFolderName(std::string folderName);
-    void writeChangesToFile();
-    void uploadChanges();
-    std::string calculateMD5Checksum(std::string fpath);   
-    void detectChanges();
+    std::string getDirectoryIdByName(std::string folderName);
+    void writeRemoteResourceChangesToFile();
+    void uploadChanges(); 
+    void detectChangesForSync();
     std::string authenticateUser();
     void buildRemoteResourceTree();
     void buildLocalResourceTree();
@@ -243,12 +243,6 @@ void get_free_memory()
 	lv2syscall1(SYSCALL_MEMORY_GET_USER_MEMORY_SIZE, (uint64_t) &meminfo);
 }
 
-bool pathExists(std::string pathToCheck)
-{
-    sysFSStat entry;
-    return sysFsStat(pathToCheck.c_str(), &entry) == 0;
-}
-
 void sysevent_callback(u64 status, u64 param, void * userdata)
 {
     switch(status)
@@ -276,26 +270,6 @@ static void dialog_handler(msgButton button, void *usrData)
         default:
                 break;
     }
-}
-
-SDL_Surface *Load_Image(std::string filePath)
-{
-	SDL_Surface* loadedImage = NULL;
-	SDL_Surface* optimizedImage = NULL;
-	loadedImage = IMG_Load(filePath.c_str());
-	if(loadedImage!=NULL){
-		optimizedImage = SDL_DisplayFormatAlpha(loadedImage);
-		SDL_FreeSurface(loadedImage);
-	}
-	return optimizedImage;
-}
-
-void draw_surface(SDL_Surface* destination, SDL_Surface* source, int x, int y)
-{
-	SDL_Rect offset;
-	offset.x = x;
-	offset.y = y;
-	SDL_BlitSurface( source, NULL, destination, &offset );
 }
 
 /**
@@ -357,29 +331,6 @@ std::string isUserAuthenticated()
     return result;
 }
 
-/**
- * Utility function to create meta data when a resource needs to be created on google drive
- * @param title the title of the resource
- * @param mimeType the mimetype. folder, octet etc
- * @param parentid the parentid of the resource, default is root
- * @return the json metadata in string notation
- */
-std::string constructMetaData(std::string title, std::string mimeType, std::string parentid)
-{
-    Json parent;
-    parent.Add("id", Json(parentid));
-
-    std::vector<Json> array;
-    array.push_back(parent);
-
-    Json meta;
-    meta.Add("title", Json(title));
-    meta.Add("parents", Json(array));
-    meta.Add("mimeType", Json(mimeType));
-
-    return meta.Str();
-}
-
 int transferProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
     if(dltotal > 0.0)
@@ -411,16 +362,7 @@ int transferProgress(void *clientp, double dltotal, double dlnow, double ultotal
     return 0;
 }
 
-/**
- * Creates a directory locally
- * @param path the path of the directory to create
- */
-void downloadDirectory(std::string path)
-{    
-    sysFsMkdir(path.c_str(),0755);
-}
-
-std::string getParentIdByFolderName(std::string folderName)
+std::string getDirectoryIdByName(std::string folderName)
 {
     std::string result = "not_found";
     if(folderName == APP_TITLE)
@@ -443,14 +385,17 @@ std::string getParentIdByFolderName(std::string folderName)
         }
     }
     
-    debugPrintf("getParentIdByFolderName: Returning Parent id %s for folder %s\n", result.c_str(), folderName.c_str());
+    debugPrintf("getDirectoryIdByName: Returning Parent id %s for folder %s\n", result.c_str(), folderName.c_str());
     
     return result;
 }
 
-void writeChangesToFile()
+/**
+ *  Write remoteResourceRoot json tree into remote.json, but first into remote.backup.
+ */
+void writeRemoteResourceChangesToFile()
 {
-    debugPrintf("writeChangesToFile: Making changes to remote.json...\n");
+    debugPrintf("writeRemoteResourceChangesToFile: initiating remote.json write...\n");
     //Backup remote.json before a write to save from any catastrophies
     StdioFile backup(REMOTE_RESOURCE_CONFIG_BACKUP, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
     remoteResourceRoot.WriteFile(backup);
@@ -462,7 +407,7 @@ void writeChangesToFile()
     file.Close();
     sysFsChmod(REMOTE_RESOURCE_CONFIG_FILENAME.c_str(),0644);
     
-    debugPrintf("writeChangesToFile: Changes to remote.json written successfully\n");
+    debugPrintf("writeRemoteResourceChangesToFile: Changes to remote.json written successfully\n");
 }
 
 /**
@@ -485,121 +430,101 @@ void uploadChanges()
     for(i=0; i < remSize; i++)
     {
         Json resource = remoteResourceRoot["data"][i];
-        if(resource["status"].Str() == "upload" || resource["status"].Str() == "update")
+        if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY || resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPDATE_KEY)
         {
             totalProgress++;
         }
     }
     
-    debugPrintf("uploadChanges Step 1: Creating directories first on Google Drive,%d\n",totalProgress);
-    
+    debugPrintf("  uploadChanges Step 1: Creating directories first on Google Drive [%d]\n",totalProgress);
     msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX0);
-
-    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0, "Uploading Parent Entries...");
-    
+    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0, "Uploading Parent Entries...");    
     msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, 0);
                     
-    for(i=0; i < remSize; i++)
+    for(i=0; i < remSize; i++)//sync missing directories
     {
-        if(dialog_action != 0)
-        {
-            syncJson = 0;
-            break;
-        }
+        if(dialog_action != 0) { syncJson = 0; break; }
         
         Json resource = remoteResourceRoot["data"][i];
         
-        if(resource["status"].Str() == "upload")
+        if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY)
         {
-            if(resource["mimeType"].Str() == DIR_MIME)
-            {
-                result = getParentIdByFolderName(resource["parentFolder"].Str());
+            if(resource["mimeType"].Str() != DIR_MIME) { continue; }
+            
+            result = getDirectoryIdByName(resource["parentFolder"].Str());                
+            if(result == "not_found"){ continue; }
                 
-                if(result != "not_found")
-                {
-                    debugPrintf("uploadChanges: Creating Directory with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
-                    
-                    msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX1);
-                    msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 0);
-                    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX1, resource["path"].Str().c_str());
+            debugPrintf("  > uploadChanges: Creating Directory with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
+            
+            msgDialogProgressBarReset(MSG_PROGRESSBAR_INDEX1);
+            msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 0);
+            msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX1, resource["path"].Str().c_str());
 
-                    Json obj = uploadDirectory(resource["title"].Str(),result);
-                                        
-                    if(!obj.Has("id"))
-                    {
-                        continue;
-                    }
-                    
-                    msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 100);
-                    
-                    remoteResourceRoot["data"][i].Add("id",Json(obj["id"].Str()));
-                    remoteResourceRoot["data"][i].Add("parentid",Json(result));
-                    remoteResourceRoot["data"][i].Add("modifiedDate",Json(obj["modifiedDate"].Str()));
-                    remoteResourceRoot["data"][i].Add("status", Json("synced"));
-                    writeChangesToFile();
-                    
-                    syncJson = 1;
-                    progressCounter++;
-                    
-                    std::stringstream ss;
-                    ss<<"Uploading Parent Entries: "<<progressCounter<<" of "<<totalProgress;
-                        
-                    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0,ss.str().c_str());
+            Json obj = uploadDirectory(resource["title"].Str(),result);
+            if(!obj.Has("id")){ continue; }
+            
+            msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 100);
+            
+            remoteResourceRoot["data"][i].Add("id",Json(obj["id"].Str()));
+            remoteResourceRoot["data"][i].Add("parentid",Json(result));
+            remoteResourceRoot["data"][i].Add("modifiedDate",Json(obj["modifiedDate"].Str()));
+            remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
+            writeRemoteResourceChangesToFile();
+            
+            syncJson = 1;
+            progressCounter++;
+            
+            std::stringstream ss;
+            ss<<"Uploading Parent Entries: "<<progressCounter<<" of "<<totalProgress;
+                
+            msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0,ss.str().c_str());
+            msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, ((progressCounter * 100) / totalProgress) - prevProgress);
+                                
+            /*if(userType == "one")
+            {
                     msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, ((progressCounter * 100) / totalProgress) - prevProgress);
-                                       
-                    /*if(userType == "one")
-                    {
-                            msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, ((progressCounter * 100) / totalProgress) - prevProgress);
-                    }
-                    if(userType == "two")
-                    {
-                            msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, ((progressCounter * 40) / totalProgress) - globProgress);
-                    }
-                    globProgress = (progressCounter * 40) / totalProgress;*/
-                    prevProgress = (progressCounter * 100) / totalProgress;
-                }
             }
-        }
+            if(userType == "two")
+            {
+                    msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX0, ((progressCounter * 40) / totalProgress) - globProgress);
+            }
+            globProgress = (progressCounter * 40) / totalProgress;*/
+            prevProgress = (progressCounter * 100) / totalProgress;
+
+        }//END_of status == upload
     }
    
-    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0, "Uploading Child Entries...");
-    
-    debugPrintf("uploadChanges Step 2: Creating files on Google Drive\n");
+    msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0, "Uploading Child Entries...");    
+    debugPrintf("  uploadChanges Step 2: Creating files on Google Drive\n");
         
     for(i=0; i < remSize; i++)
     {   
-        if(dialog_action != 0)
-        {
-            break;
-        }
+        if(dialog_action != 0) {break; }
         
         Json resource = remoteResourceRoot["data"][i];
         
-        if(resource["status"].Str() == "upload")
+        if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY)
         {
             if(resource["mimeType"].Str() != DIR_MIME)
             {
-                result = getParentIdByFolderName(resource["parentFolder"].Str());
+                result = getDirectoryIdByName(resource["parentFolder"].Str());
              
                 if(result != "not_found")
                 {
-                    debugPrintf("uploadChanges: Creating file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
+                    debugPrintf("  > uploadChanges: Creating file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
                     Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result);
                     
-                    if(!obj.Has("id"))
-                    {
-                        continue;
-                    }
+                    if(!obj.Has("id")){continue;}
                     
                     remoteResourceRoot["data"][i].Add("id", Json(obj["id"].Str()));
                     remoteResourceRoot["data"][i].Add("parentid", Json(result));
                     remoteResourceRoot["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
                     remoteResourceRoot["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
                     remoteResourceRoot["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
-                    remoteResourceRoot["data"][i].Add("status", Json("synced"));
+                    remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
 
-                    writeChangesToFile();
+                    writeRemoteResourceChangesToFile();
                     syncJson = 1;
                     progressCounter++;
                     
@@ -622,33 +547,30 @@ void uploadChanges()
                     
                     //get_free_memory();
                     //debugPrintf("System Memory: %u, %u\n",meminfo.avail,meminfo.total);
-                }
+                }//END_of isFound
                 //else mark this file to be deleted, if this feature is ever required
-            }
-        }
-        else if(resource["status"].Str() == "update")
+            }//END_of if !isDirectory
+        }//END_of status == upload
+        else if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPDATE_KEY)
         {
             if(resource["mimeType"].Str() != DIR_MIME)
             {
-                result = getParentIdByFolderName(resource["parentFolder"].Str());
+                result = getDirectoryIdByName(resource["parentFolder"].Str());
              
                 if(result != "not_found")
                 {
-                    debugPrintf("uploadChanges: Re-visioning file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
+                    debugPrintf("  > uploadChanges: Re-visioning file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
                     Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result, resource["id"].Str());
 
-                    if(!obj.Has("id"))
-                    {
-                        continue;
-                    }
+                    if(!obj.Has("id")) {continue;}
                     
                     remoteResourceRoot["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
                     remoteResourceRoot["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
                     remoteResourceRoot["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
-                    remoteResourceRoot["data"][i].Add("status", Json("synced"));
+                    remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
 
-                    writeChangesToFile();
+                    writeRemoteResourceChangesToFile();
                     syncJson = 1;
                     progressCounter++;
                     
@@ -671,12 +593,12 @@ void uploadChanges()
                     
                     //get_free_memory();
                     //debugPrintf("System Memory: %u, %u\n",meminfo.avail,meminfo.total);
-                }
-            }
-        }
-    }
+                }//END_of if wasFileFound -> update
+            }//END_of if !isDirectory
+        }//END_of if update
+    }//END_of for loop
     
-    debugPrintf("uploadChanges Step 3: Uploading remote.json to google drive\n" );
+    debugPrintf("  uploadChanges Step 3: Uploading remote.json to google drive\n" );
        
     if(remoteJsonId == "root")
     {
@@ -695,24 +617,15 @@ void uploadChanges()
     }
 }
 
-std::string calculateMD5Checksum(std::string fpath)
-{
-    unsigned char md5Out[16];
-    char convBuf[64];
-
-    if (md5_file(fpath.c_str(),md5Out) == 0)
-    {
-        for(int k = 0; k < 16; k++)
-        {
-                snprintf(convBuf, 64, "%s%02x", convBuf, md5Out[k]);
-        }
-        //std::string res = convBuf;
-        return convBuf;
-    }
-    return "nill";
-}
-
-void detectChanges()
+/**
+ * Compare localResourceTree with remoteResourceTree.
+ *  1. If remote has no local resource, then add it to remoteResourceTree for upload
+ *  2. If remote has local resource and it has "synced" status, then
+ *    a) don't compare directories
+ *    b) check file modification time and md5 checksum
+ * 
+ */
+void detectChangesForSync()
 {
     // Upload Mode only for now
     // 1 - If an entry exists in local but not in remote, add it and mark for upload
@@ -725,6 +638,7 @@ void detectChanges()
     u32 prevProgress = 0;
     bool found;
      
+    debugPrintf("  Detecting changes...\n");
     msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX0, "Detecting Changes...");
     msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX1, "Finding file differences...");
         
@@ -732,10 +646,7 @@ void detectChanges()
     {
         found = false;
         
-        if(dialog_action != 0)
-        {
-            break;
-        }
+        if(dialog_action != 0){break; }
         
         Json lres = localResourceRoot["data"][i];
         
@@ -746,48 +657,47 @@ void detectChanges()
             if(lres["path"].Str() == rres["path"].Str())
             {
                 found = true;
-                if(lres["mimeType"].Str() != DIR_MIME)
+                if(lres["mimeType"].Str() == DIR_MIME) {continue;}
+                
+                if(rres["status"].Str() == RESOURCE_REMOTE_STATUS_SYNCED_KEY) //if synced, check for modifications
                 {
-                    if(rres["status"].Str() == "synced")
+                    sysFSStat lstat;
+                    sysFsStat(lres["path"].Str().c_str(),&lstat) ;
+
+                    time_t fileModTime = lstat.st_mtime;
+
+                    std::string remoteTime = rres["modifiedDate"].Str().substr(0,18);
+
+                    struct tm remoteModTime = {0};
+                    strptime(remoteTime.c_str(), "%Y-%m-%dT%H:%M:%S", &remoteModTime);
+
+                    time_t remoteEpoch = mktime(&remoteModTime);
+
+                    //debugPrintf("Times are %lld, %lld\n", (long long int)fileModTime, (long long int)remoteEpoch);
+
+                    double seconds = difftime(fileModTime, remoteEpoch);
+                    if (seconds > 0) 
                     {
-                        sysFSStat lstat;
-                        sysFsStat(lres["path"].Str().c_str(),&lstat) ;
-
-                        time_t fileModTime = lstat.st_mtime;
-
-                        std::string remoteTime = rres["modifiedDate"].Str().substr(0,18);
-
-                        struct tm remoteModTime = {0};
-                        strptime(remoteTime.c_str(), "%Y-%m-%dT%H:%M:%S", &remoteModTime);
-
-                        time_t remoteEpoch = mktime(&remoteModTime);
-
-                        //debugPrintf("Times are %lld, %lld\n", (long long int)fileModTime, (long long int)remoteEpoch);
-
-                        double seconds = difftime(fileModTime, remoteEpoch);
-                        if (seconds > 0) 
-                        {
-                            debugPrintf("Local file has been modified %s\n", rres["path"].Str().c_str());
-                            
-                            std::string md5c = calculateMD5Checksum(lres["path"].Str());
+                        debugPrintf("Local file has been modified %s\n", rres["path"].Str().c_str());
                         
-                            if(md5c != "nill")
-                            {
-                                if(md5c != rres["md5Checksum"].Str())
-                                {    
-                                    debugPrintf("Local file MD5 has been changed %s,%s,%s\n", rres["path"].Str().c_str(),md5c.c_str(),rres["md5Checksum"].Str().c_str());
-                                    remoteResourceRoot["data"][j].Add("status", Json("update"));
-                                }
+                        std::string md5c = calculateMD5Checksum(lres["path"].Str());
+                    
+                        if(md5c != "nill")
+                        {
+                            if(md5c != rres["md5Checksum"].Str())
+                            {    
+                                debugPrintf("Local file MD5 has been changed %s,%s,%s\n", rres["path"].Str().c_str(),md5c.c_str(),rres["md5Checksum"].Str().c_str());
+                                remoteResourceRoot["data"][j].Add("status", Json(RESOURCE_REMOTE_STATUS_UPDATE_KEY));
                             }
                         }
                     }
-                }
-            }
-        }
+                }//END_of if isSynced                
+            }//END_of if found
+        }//END_of for loop remoteResourceTree
               
         if(!found)
         {
-            debugPrintf("Found New Entry in Local Resource, Adding for sync %s", lres["path"].Str().c_str());
+            debugPrintf("  > Found New Entry in Local Resource, Adding for sync %s\n", lres["path"].Str().c_str());
             remoteResourceRoot["data"].Add(lres);
         }
         
@@ -805,7 +715,9 @@ void detectChanges()
 
         //globProgress = (i * 20) / lrtSize;
         prevProgress = (i * 100) / lrtSize;
-    }
+
+    }//END_of for loop localResourceTree
+
     //get_free_memory();
     //debugPrintf("System Memory: %u, %u\n",meminfo.avail,meminfo.total);
 }
@@ -883,7 +795,7 @@ void buildRemoteResourceTree()
 
     remoteResourceRoot.Add("data",Json(resourceTree));
     
-    writeChangesToFile();
+    writeRemoteResourceChangesToFile();
 }
 
 /**
@@ -936,7 +848,7 @@ void buildLocalResourceTree()
             resource.Add("parentid", Json(rootFolderId));
             resource.Add("parentFolder",Json(APP_TITLE));
             resource.Add("modifiedDate", Json("0"));
-            resource.Add("status",Json("upload"));
+            resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
 
             resourceTree.push_back(Json(resource));            
         }
@@ -990,7 +902,7 @@ void buildLocalResourceTree()
                 resource.Add("parentid", Json("nill"));
                 resource.Add("parentFolder",Json(k->c_str()));
                 resource.Add("modifiedDate", Json("0"));
-                resource.Add("status",Json("upload"));
+                resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
 
                 resourceTree.push_back(Json(resource));
                 
@@ -1042,7 +954,7 @@ void buildLocalResourceTree()
                 resource.Add("modifiedDate", Json("0"));
                 resource.Add("fileSize",Json("0"));
                 resource.Add("md5Checksum",Json("0"));
-                resource.Add("status",Json("upload"));
+                resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
 
                 resourceTree.push_back(Json(resource));
                 
@@ -1083,7 +995,7 @@ void buildLocalResourceTree()
                     resource.Add("parentid", Json(rootFolderId));
                     resource.Add("parentFolder",Json(APP_TITLE));
                     resource.Add("modifiedDate", Json("0"));
-                    resource.Add("status",Json("upload"));
+                    resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
 
                     resourceTree.push_back(Json(resource));
                     
@@ -1222,12 +1134,12 @@ int initCloudDrive(void *arg)
             remoteResourceRoot = Json::ParseFile(file);
             file.Close();
             
-            detectChanges();
+            detectChangesForSync();
             
             uploadChanges();
             downloadChanges(&dialog_action);
         }else{
-            debugPrintf("File %s doesnt exist\n", file.filepath().c_str());
+            debugPrintf("File %s doesn't exist\n", file.filepath().c_str());
             userType = "three";
         }
     }
