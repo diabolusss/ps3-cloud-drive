@@ -1,0 +1,23 @@
+#
+# make -f run
+#
+#
+##################################################################################
+TARGET	:=	$(notdir $(CURDIR))
+OUTPUT	:=	$(CURDIR)/$(TARGET)
+ts := $(shell /bin/date +%s)
+DEBUG_LOG   := logs/debug_$(ts).log
+DEBUG_LISTEN_TIMEOUT := 20
+
+#---------------------------------------------------------------------------------
+.PHONY: debug run
+run:  debug
+	@echo $(OUTPUT).self
+	rpcs3 --no-gui $(OUTPUT).self &
+	##temporary fix limits
+	##sudo sh -c "ulimit -l unlimited && exec su colt -c 'rpcs3 --no-gui $(OUTPUT).self'" &
+
+debug:
+	@echo Starting ncat debug logger listener...
+	timeout $(DEBUG_LISTEN_TIMEOUT) ncat --udp --listen -p 18194 --recv-only -o $(DEBUG_LOG) &
+	
