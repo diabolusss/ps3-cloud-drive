@@ -70,28 +70,34 @@
     void writeRemoteResourceChangesToFile();
     void uploadChanges(); 
     void detectChangesForSync();
-    std::string authenticateUser();
+    std::string registerDevice();
     void buildRemoteResourceTree();
     void buildLocalResourceTree();
     int initCloudDrive(void *arg);
 
+const std::string APP_TITLE     = "ps3clouddrive";
 const std::string JSON_MIME     = "application/json";
 const std::string DIR_MIME      = "application/vnd.google-apps.folder";
 const std::string OCTET_MIME    = "application/octet-stream";
 const std::string APP_PATH              = "/dev_hdd0/game/PSCD00001/USRDIR/";
-const std::string appFile               = APP_PATH+"ps3clouddrive.json";
-const std::string appFileBackup         = APP_PATH+"ps3clouddrive.backup";
+const std::string appConfigFile               = APP_PATH+APP_TITLE+".conf";
+const std::string appConfigFileBackup         = APP_PATH+APP_TITLE+".conf.backup";
 const std::string LOCAL_RESOURCE_CONFIG_FILENAME     = APP_PATH+"local.json";
 const std::string REMOTE_RESOURCE_CONFIG_FILENAME    = APP_PATH+"remote.json";
 const std::string REMOTE_RESOURCE_CONFIG_BACKUP      = APP_PATH+"remote.backup";
 
-const std::string APP_TITLE     = "ps3clouddrive";
 extern OAuth2 authToken;
 
-std::string rootFolderId = "root";
-std::string deviceId     = "nill";
-std::string remoteJsonId = "root";
-std::string last_sync = "0";
+/** app configuration file variables */
+//TODO convert to union
+    std::string selectedConfig = "google"; //by default use google api config
+    std::string rootFolderId = "root";
+    std::string deviceId     = "nill";
+    std::string remoteJsonId = "root";
+    std::string last_sync = "0";
+    std::string api_scope = "";
+    u64 curr_sync_ts;
+
 
 Json localResourceRoot;
 Json remoteResourceRoot;
@@ -100,7 +106,7 @@ SDL_Event event;
 SDL_Surface* screen = NULL;
 SDL_Surface *image = NULL;
 TTF_Font *Sans;
-SDL_Color GREY = { 57, 57, 57};
+SDL_Color GREY = {57, 57, 57};
 
 msgType dialog_type;
 static int dialog_action = 0;
@@ -181,6 +187,10 @@ int main(int argc, char **argv)
     draw_surface(screen, image, 0, 0);
 
     Sans = TTF_OpenFont(FontPath.c_str(), 20.0);
+
+    // current date/time based on current system
+    sysGetCurrentTime(&curr_sync_ts, new u64()); 
+    debugPrintf("Current sync time: %s -> %lld sec\n", epochTsToString((time_t*) &curr_sync_ts).c_str(), curr_sync_ts);
 
     thread = SDL_CreateThread(initCloudDrive, NULL);
 
@@ -277,24 +287,42 @@ static void dialog_handler(msgButton button, void *usrData)
  */
 void storeConfig()
 {
-    StdioFile file(appFile, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
-    StdioFile backup(appFileBackup, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
-    
+    debugPrintf(" Saving app configuration...\n");
+
+    StdioFile file(appConfigFile);
+    StdioFile backup(appConfigFileBackup, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
+
     Json appConfig;
-    appConfig.Add("refresh_token",Json(authToken.RefreshToken()));
-    appConfig.Add("device_id",Json(authToken.DeviceCode()));
-    appConfig.Add("root_id",Json(rootFolderId));
-    appConfig.Add("last_sync",Json(last_sync));
-    appConfig.Add("remote_fid", Json(remoteJsonId));
-    
+    if(file.Exists()){
+        appConfig = Json::ParseFile(file);
+    }
+    file.OpenWithFlags(SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);    
+
+    {//update only selected 'default_api' settings
+        Json selectedApiConf;
+        if(!appConfig.AsObject().empty() && appConfig.Has("default_api")){
+            selectedApiConf = appConfig[selectedConfig];
+        }else{
+            appConfig.Add("default_api",    Json(selectedConfig));                    
+        }
+
+            selectedApiConf.Add("refresh_token",  Json(authToken.RefreshToken()));
+            selectedApiConf.Add("device_id",      Json(authToken.DeviceCode())); //oauth2 device code
+            selectedApiConf.Add("last_sync",      Json(epochTsToString((time_t*) &curr_sync_ts)));
+            selectedApiConf.Add("remote_fid",     Json(remoteJsonId));
+            selectedApiConf.Add("root_id",        Json(rootFolderId));
+            selectedApiConf.Add("scope",          Json(authToken.getScope()));
+        appConfig.Add(selectedConfig, selectedApiConf);
+    }
+
     appConfig.WriteFile(file);
     appConfig.WriteFile(backup);
     
     file.Close();
     backup.Close();
     
-    sysFsChmod(appFile.c_str(),0644);
-    sysFsChmod(appFileBackup.c_str(),0644);
+    sysFsChmod(appConfigFile.c_str(),0644);
+    sysFsChmod(appConfigFileBackup.c_str(),0644);
 }
 
 /**
@@ -306,26 +334,44 @@ std::string isUserAuthenticated()
 {
     std::string result = "not_found";
     Json config;
-    StdioFile file(appFile);
+    StdioFile file(appConfigFile);
     
     if(!file.Exists())
     //TODO try to read backup config file
     {
-        debugPrintf("Config file (%s) not found, returning empty handed...\n", appFile.c_str());
+        debugPrintf("  Config file (%s) not found, returning empty handed...\n", appConfigFile.c_str());
         return result;
     }
-    debugPrintf("Config file (%s) found, parsing...\n", appFile.c_str());
+    debugPrintf("  Config file (%s) found, parsing...\n", appConfigFile.c_str());
     
     config = Json::ParseFile(file);
 
     if(!config.AsObject().empty())
     {
-            debugPrintf("Config file not empty, returning refresh token...\n");
-            result = config["refresh_token"].Str();
-            deviceId = config.Has("device_id") ? config["device_id"].Str() : "nill";
-            rootFolderId = config.Has("root_id") ? config["root_id"].Str() : "root";
-            last_sync = config.Has("last_sync") ? config["last_sync"].Str() : "0";
-            remoteJsonId = config.Has("remote_fid") ? config["remote_fid"].Str() : "root";
+        debugPrintf("  > Config file not empty, getting refresh token...\n");
+        if(config.Has("refresh_token")){ //keep for backward compatibility
+            result          = config["refresh_token"].Str();
+            deviceId        = config.Has("device_id")   ? config["device_id"].Str() : "nill";
+            rootFolderId    = config.Has("root_id")     ? config["root_id"].Str() : "root";
+            last_sync       = config.Has("last_sync")   ? config["last_sync"].Str() : "0";
+            remoteJsonId    = config.Has("remote_fid")  ? config["remote_fid"].Str() : "root";
+            api_scope       = config.Has("scope")       ? config["scope"].Str() : "";
+
+        }else if(config.Has("default_api")){
+            selectedConfig = config["default_api"].Str();
+            if(selectedConfig.empty()){ selectedConfig = "google";} //assume default
+
+            debugPrintf("  > trying selected api config: '%s'\n", selectedConfig.c_str());
+
+            Json selectedApi = config[selectedConfig];
+
+            result          = selectedApi["refresh_token"].Str();
+            deviceId        = selectedApi.Has("device_id")  ? selectedApi["device_id"].Str() : "nill";
+            rootFolderId    = selectedApi.Has("root_id")    ? selectedApi["root_id"].Str() : "root";
+            last_sync       = selectedApi.Has("last_sync")  ? selectedApi["last_sync"].Str() : "0";
+            remoteJsonId    = selectedApi.Has("remote_fid") ? selectedApi["remote_fid"].Str() : "root";
+            api_scope       = selectedApi.Has("scope")      ? selectedApi["scope"].Str() : "";
+        }
     }
     
     return result;
@@ -723,27 +769,34 @@ void detectChangesForSync()
 }
 
 /**
- * Initiates the user authentication and is also responsible for getting device id
+ * Initiates OAuth2 user authentication for limited devices.
+ *  As a result gets:
+ *   - device code
+ *   - access token
+ *   - refresh token
+ * 
  * @return "authorization_complete" if authenticated and "not_found" if it fails
  */
-std::string authenticateUser()
+std::string registerDevice()
 {
     std::string authStatus = "not_found";
     std::string usercode;
 
-    debugPrintf("Device Authentication Function Called...\n");
+    debugPrintf("  Device Authentication Function Called...\n");
     usercode = authToken.DeviceAuth();
 
-    debugPrintf("Your User Code is:  %s \n", usercode.c_str());
+    debugPrintf("  > Device Code:  %s \n", authToken.DeviceCode().c_str());
+    debugPrintf("  > User Code:  %s \n", usercode.c_str());
     
-    std::string userCodePrint = "Your User Code is: " + usercode + "\n\n Please visit http://www.google.com/device for approval";
+    std::string userCodePrint = "Your User Code is: " + usercode 
+            + "\n\n Please visit "+authToken.getDeviceVerificationUrl().c_str()+" for approval"
+        ;
     
     SDL_Surface *codeAuthText = NULL;
     codeAuthText = TTF_RenderText_Blended( Sans, userCodePrint.c_str(), GREY);
     draw_surface(screen, codeAuthText, (appWidth - codeAuthText->w) / 2, (72 * appHeight) / 100);
 
-    u64 epochTime;
-    u64 nsec;
+    u64 epochTime, nsec;
     u64 previousCallTime;
 
     sysGetCurrentTime(&epochTime, &nsec);
@@ -754,7 +807,7 @@ std::string authenticateUser()
         sysGetCurrentTime(&epochTime, &nsec);
         if (epochTime - previousCallTime > 10)
         {
-            debugPrintf("Polling for user authentication....\n");
+            debugPrintf("   Polling for user authentication....\n");
             authStatus = authToken.Auth();
             previousCallTime = epochTime;
         }
@@ -1035,24 +1088,28 @@ int initCloudDrive(void *arg)
     
     if (authStatus == "not_found")
     {
-        debugPrintf("User is not authenticated (userType 1), starting Authentication...\n");
-        authenticateUser();
+        debugPrintf("  User is not authenticated (userType 1), starting Authentication...\n");
+        registerDevice();
     }
     else
     {
         userType = "two";
-        debugPrintf("Possible Token Read from file (userType 2):  %s \n", authStatus.c_str());
+        debugPrintf("  Possible Token Read from file (userType 2):  \n\t%s \n   device_code: %s\n   scope: %s\n"
+            , authStatus.c_str(), deviceId.c_str(), api_scope.c_str()
+        );
 
         authToken.setRefreshToken(authStatus);
+        authToken.setDeviceCode(deviceId);
+        authToken.setScope(api_scope);      
         if (authToken.Refresh() != "valid")
         {
-            debugPrintf("Token Read from file was invalid, need to Re-Authenticate");
-            authenticateUser();
+            debugPrintf("  Token Read from file was invalid, need to Re-Authenticate");
+            registerDevice();
         }
     }
-
+    
     storeConfig();
-    debugPrintf("Authentication Phase Complete, checking remote root folder existence\n");
+    debugPrintf("< Authentication Phase Complete, checking remote root folder existence\n");
     
     syncing = 1;
     
@@ -1172,16 +1229,8 @@ int initCloudDrive(void *arg)
             buildRemoteResourceTree();
             downloadChanges(&dialog_action);
         }
-    }
+    } 
 
-    //TODO: After every scenario completion, write last sync date to config
-    /*u64 epochTime;
-    u64 nsec;
-
-    sysGetCurrentTime(&epochTime, &nsec);
-    
-    last_sync = new std::string(epochTime);*/
-    
     syncing = 0;
     
     msgDialogAbort();

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <SDL/SDL.h>
 
+std::string epochTsToString(time_t *ts);
 std::string calculateMD5Checksum(std::string fpath);
 void createDownloadDir(std::string path);
 

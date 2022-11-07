@@ -3,6 +3,14 @@
 
 #include <polarssl/md5.h>
 #include <SDL/SDL_image.h>
+#include <sys/systime.h>
+
+std::string epochTsToString(time_t *ts){
+    char dt[28];
+    strftime(dt, 28, "%FT%TZ%z", gmtime(ts));
+
+    return dt;
+}
 
 std::string calculateMD5Checksum(std::string fpath)
 {

@@ -24,13 +24,18 @@
 class OAuth2
 {
 	public :
+		std::string m_verification_url; //each api has own url - use that
+		std::string m_scope;
+
 		OAuth2(
-			const std::string&	client_id,
-			const std::string&	client_secret ) ;
+				const std::string&	client_id,
+				const std::string&	client_secret 
+			) ;
 		OAuth2(
-			const std::string&	refresh_code,
-			const std::string&	client_id,
-			const std::string&	client_secret ) ;
+				const std::string&	refresh_code,
+				const std::string&	client_id,
+				const std::string&	client_secret 
+			) ;
 
 		std::string Str() const ;
 
@@ -38,13 +43,18 @@ class OAuth2
 		std::string DeviceAuth();
 		std::string Refresh( ) ;
 		
-                void setRefreshToken(std::string token);
+        void setRefreshToken(std::string token);
+        void setDeviceCode(std::string code);
+        void setScope(std::string scope);
 		std::string RefreshToken( ) const ;
 		std::string AccessToken( ) const ;
 		std::string DeviceCode( ) const;
+		std::string getDeviceVerificationUrl( ) const;
+		std::string getScope( ) const;
 	
 		// adding HTTP auth header
-		std::string HttpHeader( ) const ;
+		std::string HttpHeaderBearer( ) const ;
+		std::string HttpHeaderBasic( ) const ;
 		std::string HostHeader( ) const;
 	
 	private :
@@ -54,4 +64,5 @@ class OAuth2
 	
 		const std::string	m_client_id ;
 		const std::string	m_client_secret ;
+		const std::string   m_client_auth_basic;
 } ;

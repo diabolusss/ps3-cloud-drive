@@ -7,7 +7,8 @@ TARGET	:=	$(notdir $(CURDIR))
 OUTPUT	:=	$(CURDIR)/$(TARGET)
 ts := $(shell /bin/date +%s)
 DEBUG_LOG   := logs/debug_$(ts).log
-DEBUG_LISTEN_TIMEOUT := 20
+## use timeout long enough to cover emulator startup ppu module compilation for new pkg
+DEBUG_LISTEN_TIMEOUT := 120
 
 #---------------------------------------------------------------------------------
 .PHONY: debug run

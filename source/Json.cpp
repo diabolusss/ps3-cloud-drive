@@ -261,7 +261,7 @@ std::ostream& operator<<( std::ostream& os, const Json& json )
 
 void Json::WriteFile( StdioFile& file ) const
 {       
-	const char *str = ::json_object_to_json_string( m_json ) ;
+	const char *str = ::json_object_to_json_string_ext( m_json, JSON_C_TO_STRING_PRETTY ) ;
 	file.Write( str, std::strlen(str) ) ;
 }
 
@@ -347,9 +347,8 @@ Json Json::Parse( const std::string& str )
 
 Json Json::ParseFile( StdioFile& file )
 {
-
 	if(file.Exists() == false){
-		debugPrintf("File %s doesnt exist\n", file.filepath().c_str());
+		debugPrintf("  File %s doesnt exist\n", file.filepath().c_str());
 		return Json( 0, NotOwned() );
 	}
 	struct json_tokener *tok = ::json_tokener_new() ;	
@@ -362,7 +361,7 @@ Json Json::ParseFile( StdioFile& file )
 		json = ::json_tokener_parse_ex( tok, buf, count ) ;
 	
 	if ( json == 0 )
-		debugPrintf("Json Parse File Errors %s\n",::json_tokener_errors[tok->err]);
+		debugPrintf("  Json Parse File Errors %s\n",::json_tokener_errors[tok->err]);
 	
 	::json_tokener_free( tok ) ;
 	
