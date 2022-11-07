@@ -1,7 +1,7 @@
 TODO
  - support koofr api
+ - use api credentials from config (multiple api support)
  - refactor: use bearer oauth class header method instead of manual input
- - check ctime is working fine on real hardware
 
 221107 
  - add base64.encode;
