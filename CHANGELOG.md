@@ -14,3 +14,4 @@ TODO
 Previous
  - add Makefile to run .self in emulator with debug listener (make -f run)
  - workaround to fix directory reading loops (rpcs3 bug)
+ - exctract api credentials into non public ('hidden') credentials.h header
