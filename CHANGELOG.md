@@ -1,6 +1,6 @@
 TODO
  - support koofr api
- - use api credentials from config (multiple api support)
+ - use api credentials from config (multiple api support) -> modify isUserAuthenticated() to init OAuth2 variable
  - refactor: use bearer oauth class header method instead of manual input
 
 221107 
