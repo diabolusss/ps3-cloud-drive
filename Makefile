@@ -43,9 +43,9 @@ PKGFILES	:=	$(CURDIR)/release
 ICON0		:=	$(CURDIR)/release/ICON0.PNG	
 PIC1		:=	$(CURDIR)/release/PIC1.PNG
 
-TITLE		:=	PS3 Cloud Drive
-APPID		:=	PSCD00001
-CONTENTID	:=	CD0001-$(APPID)_00-0000000000000000
+TITLE		:=	PS3 Cloud Sync
+APPID		:=	PSCS00001
+CONTENTID	:=	CS0001-$(APPID)_00-0000000000000000
 
 #---------------------------------------------------------------------------------
 # options for code generation

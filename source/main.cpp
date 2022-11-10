@@ -75,11 +75,11 @@
     void buildLocalResourceTree();
     int initCloudDrive(void *arg);
 
-const std::string APP_TITLE     = "ps3clouddrive";
+const std::string APP_TITLE     = "ps3cloudsync";
 const std::string JSON_MIME     = "application/json";
 const std::string DIR_MIME      = "application/vnd.google-apps.folder";
 const std::string OCTET_MIME    = "application/octet-stream";
-const std::string APP_PATH              = "/dev_hdd0/game/PSCD00001/USRDIR/";
+const std::string APP_PATH              = "/dev_hdd0/game/PSCS00001/USRDIR/";
 const std::string appConfigFile               = APP_PATH+APP_TITLE+".conf";
 const std::string appConfigFileBackup         = APP_PATH+APP_TITLE+".conf.backup";
 const std::string LOCAL_RESOURCE_CONFIG_FILENAME     = APP_PATH+"local.json";
@@ -89,15 +89,16 @@ const std::string REMOTE_RESOURCE_CONFIG_BACKUP      = APP_PATH+"remote.backup";
 extern OAuth2 authToken;
 
 /** app configuration file variables */
-//TODO convert to union
-    std::string selectedConfig = "google"; //by default use google api config
+typedef struct {
+    std::string selectedApi = "google"; //by default use google api config
     std::string rootFolderId = "root";
     std::string deviceId     = "nill";
     std::string remoteJsonId = "root";
     std::string last_sync = "0";
     std::string api_scope = "";
-    u64 curr_sync_ts;
-
+    u64 curr_sync_ts = 0;
+} SelectedApiConf_t;
+SelectedApiConf_t API_CONF;
 
 Json localResourceRoot;
 Json remoteResourceRoot;
@@ -134,7 +135,6 @@ typedef struct {
 	uint32_t avail;
 } _meminfo;
 _meminfo meminfo;
-
 
 int main(int argc, char **argv)
 {
@@ -189,8 +189,8 @@ int main(int argc, char **argv)
     Sans = TTF_OpenFont(FontPath.c_str(), 20.0);
 
     // current date/time based on current system
-    sysGetCurrentTime(&curr_sync_ts, new u64()); 
-    debugPrintf("Current sync time: %s -> %lld sec\n", epochTsToString((time_t*) &curr_sync_ts).c_str(), curr_sync_ts);
+    sysGetCurrentTime(&API_CONF.curr_sync_ts, new u64()); 
+    debugPrintf("Current sync time: %s -> %lld sec\n", epochTsToString((time_t*) &API_CONF.curr_sync_ts).c_str(), API_CONF.curr_sync_ts);
 
     thread = SDL_CreateThread(initCloudDrive, NULL);
 
@@ -301,18 +301,18 @@ void storeConfig()
     {//update only selected 'default_api' settings
         Json selectedApiConf;
         if(!appConfig.AsObject().empty() && appConfig.Has("default_api")){
-            selectedApiConf = appConfig[selectedConfig];
+            selectedApiConf = appConfig[API_CONF.selectedApi];
         }else{
-            appConfig.Add("default_api",    Json(selectedConfig));                    
+            appConfig.Add("default_api",    Json(API_CONF.selectedApi));                    
         }
 
             selectedApiConf.Add("refresh_token",  Json(authToken.RefreshToken()));
             selectedApiConf.Add("device_id",      Json(authToken.DeviceCode())); //oauth2 device code
-            selectedApiConf.Add("last_sync",      Json(epochTsToString((time_t*) &curr_sync_ts)));
-            selectedApiConf.Add("remote_fid",     Json(remoteJsonId));
-            selectedApiConf.Add("root_id",        Json(rootFolderId));
+            selectedApiConf.Add("last_sync",      Json(epochTsToString((time_t*) &API_CONF.curr_sync_ts)));
+            selectedApiConf.Add("remote_fid",     Json(API_CONF.remoteJsonId));
+            selectedApiConf.Add("root_id",        Json(API_CONF.rootFolderId));
             selectedApiConf.Add("scope",          Json(authToken.getScope()));
-        appConfig.Add(selectedConfig, selectedApiConf);
+        appConfig.Add(API_CONF.selectedApi, selectedApiConf);
     }
 
     appConfig.WriteFile(file);
@@ -351,26 +351,26 @@ std::string isUserAuthenticated()
         debugPrintf("  > Config file not empty, getting refresh token...\n");
         if(config.Has("refresh_token")){ //keep for backward compatibility
             result          = config["refresh_token"].Str();
-            deviceId        = config.Has("device_id")   ? config["device_id"].Str() : "nill";
-            rootFolderId    = config.Has("root_id")     ? config["root_id"].Str() : "root";
-            last_sync       = config.Has("last_sync")   ? config["last_sync"].Str() : "0";
-            remoteJsonId    = config.Has("remote_fid")  ? config["remote_fid"].Str() : "root";
-            api_scope       = config.Has("scope")       ? config["scope"].Str() : "";
+            API_CONF.deviceId        = config.Has("device_id")   ? config["device_id"].Str() : "nill";
+            API_CONF.rootFolderId    = config.Has("root_id")     ? config["root_id"].Str() : "root";
+            API_CONF.last_sync       = config.Has("last_sync")   ? config["last_sync"].Str() : "0";
+            API_CONF.remoteJsonId    = config.Has("remote_fid")  ? config["remote_fid"].Str() : "root";
+            API_CONF.api_scope       = config.Has("scope")       ? config["scope"].Str() : "";
 
         }else if(config.Has("default_api")){
-            selectedConfig = config["default_api"].Str();
-            if(selectedConfig.empty()){ selectedConfig = "google";} //assume default
+            API_CONF.selectedApi = config["default_api"].Str();
+            if(API_CONF.selectedApi.empty()){ API_CONF.selectedApi = "google";} //assume default
 
-            debugPrintf("  > trying selected api config: '%s'\n", selectedConfig.c_str());
+            debugPrintf("  > trying selected api config: '%s'\n", API_CONF.selectedApi.c_str());
 
-            Json selectedApi = config[selectedConfig];
+            Json selectedApi = config[API_CONF.selectedApi];
 
             result          = selectedApi["refresh_token"].Str();
-            deviceId        = selectedApi.Has("device_id")  ? selectedApi["device_id"].Str() : "nill";
-            rootFolderId    = selectedApi.Has("root_id")    ? selectedApi["root_id"].Str() : "root";
-            last_sync       = selectedApi.Has("last_sync")  ? selectedApi["last_sync"].Str() : "0";
-            remoteJsonId    = selectedApi.Has("remote_fid") ? selectedApi["remote_fid"].Str() : "root";
-            api_scope       = selectedApi.Has("scope")      ? selectedApi["scope"].Str() : "";
+            API_CONF.deviceId        = selectedApi.Has("device_id")  ? selectedApi["device_id"].Str() : "nill";
+            API_CONF.rootFolderId    = selectedApi.Has("root_id")    ? selectedApi["root_id"].Str() : "root";
+            API_CONF.last_sync       = selectedApi.Has("last_sync")  ? selectedApi["last_sync"].Str() : "0";
+            API_CONF.remoteJsonId    = selectedApi.Has("remote_fid") ? selectedApi["remote_fid"].Str() : "root";
+            API_CONF.api_scope       = selectedApi.Has("scope")      ? selectedApi["scope"].Str() : "";
         }
     }
     
@@ -413,7 +413,7 @@ std::string getDirectoryIdByName(std::string folderName)
     std::string result = "not_found";
     if(folderName == APP_TITLE)
     {
-        result = rootFolderId;
+        result = API_CONF.rootFolderId;
     }
     else
     {
@@ -646,20 +646,20 @@ void uploadChanges()
     
     debugPrintf("  uploadChanges Step 3: Uploading remote.json to google drive\n" );
        
-    if(remoteJsonId == "root")
+    if(API_CONF.remoteJsonId == "root")
     {
         Json remJson;
-        remJson = uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,rootFolderId);
+        remJson = uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId);
         if(remJson.Has("id"))
         {
-            remoteJsonId = remJson["id"].Str();
+            API_CONF.remoteJsonId = remJson["id"].Str();
             storeConfig();
         }
     }
     else if(syncJson == 1)
     {
         debugPrintf("Updating remote.json on the server...\n" );
-        uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,rootFolderId,remoteJsonId);
+        uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId,API_CONF.remoteJsonId);
     }
 }
 
@@ -823,7 +823,7 @@ void buildRemoteResourceTree()
 {
     std::vector<Json> resourceTree;
     std::vector<std::string> foldersToTraverse;
-    Json resourceObject = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,rootFolderId);
+    Json resourceObject = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,API_CONF.rootFolderId);
     if(resourceObject.Has("id"))
     {
         resourceTree.push_back(Json(resourceObject));
@@ -898,7 +898,7 @@ void buildLocalResourceTree()
             resource.Add("title", Json(entryName));
             resource.Add("path", Json(path + "/" + entryName + "/savedata"));
             resource.Add("mimeType", Json(DIR_MIME));
-            resource.Add("parentid", Json(rootFolderId));
+            resource.Add("parentid", Json(API_CONF.rootFolderId));
             resource.Add("parentFolder",Json(APP_TITLE));
             resource.Add("modifiedDate", Json("0"));
             resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
@@ -1045,7 +1045,7 @@ void buildLocalResourceTree()
                     resource.Add("title", Json(entryName));
                     resource.Add("path", Json("/dev_hdd0/savedata/vmc/"+entryName));
                     resource.Add("mimeType", Json(OCTET_MIME));
-                    resource.Add("parentid", Json(rootFolderId));
+                    resource.Add("parentid", Json(API_CONF.rootFolderId));
                     resource.Add("parentFolder",Json(APP_TITLE));
                     resource.Add("modifiedDate", Json("0"));
                     resource.Add("status",Json(RESOURCE_REMOTE_STATUS_UPLOAD_KEY));
@@ -1095,12 +1095,12 @@ int initCloudDrive(void *arg)
     {
         userType = "two";
         debugPrintf("  Possible Token Read from file (userType 2):  \n\t%s \n   device_code: %s\n   scope: %s\n"
-            , authStatus.c_str(), deviceId.c_str(), api_scope.c_str()
+            , authStatus.c_str(), API_CONF.deviceId.c_str(), API_CONF.api_scope.c_str()
         );
 
         authToken.setRefreshToken(authStatus);
-        authToken.setDeviceCode(deviceId);
-        authToken.setScope(api_scope);      
+        authToken.setDeviceCode(API_CONF.deviceId);
+        authToken.setScope(API_CONF.api_scope);      
         if (authToken.Refresh() != "valid")
         {
             debugPrintf("  Token Read from file was invalid, need to Re-Authenticate");
@@ -1126,8 +1126,8 @@ int initCloudDrive(void *arg)
     Json rootResource = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,"root");
     if(rootResource.Has("id"))
     {
-        rootFolderId = rootResource["id"].Str();
-        debugPrintf("User has previous data on Google Drive (userType 3) with id %s\n",rootFolderId.c_str());
+        API_CONF.rootFolderId = rootResource["id"].Str();
+        debugPrintf("User has previous data on Google Drive (userType 3) with id %s\n",API_CONF.rootFolderId.c_str());
         if(userType == "one") userType = "three";
     }
     else
@@ -1138,8 +1138,8 @@ int initCloudDrive(void *arg)
         
         if(rtId.Has("id"))
         {
-            rootFolderId = rtId["id"].Str();
-            debugPrintf("Created root directory on Google Drive with id %s\n",rootFolderId.c_str());
+            API_CONF.rootFolderId = rtId["id"].Str();
+            debugPrintf("Created root directory on Google Drive with id %s\n",API_CONF.rootFolderId.c_str());
             storeConfig();
         }
         else
@@ -1207,14 +1207,14 @@ int initCloudDrive(void *arg)
     //TODO: Revert to Second Time scenario
     if(userType == "three")
     {
-        debugPrintf("Checking for remote.json (userType=3) on Google Drive with root_id %s\n",rootFolderId.c_str());
-        Json remoteJson = checkIfRemoteResourceExists("remote.json",JSON_MIME,rootFolderId);
+        debugPrintf("Checking for remote.json (userType=3) on Google Drive with root_id %s\n",API_CONF.rootFolderId.c_str());
+        Json remoteJson = checkIfRemoteResourceExists("remote.json",JSON_MIME,API_CONF.rootFolderId);
         
         if(remoteJson.Has("id"))
         {
-            remoteJsonId = remoteJson["id"].Str();
-            debugPrintf("Downloading remote.json from Google Drive with id %s\n",remoteJsonId.c_str());
-            downloadFile(REMOTE_RESOURCE_CONFIG_FILENAME, remoteJsonId);
+            API_CONF.remoteJsonId = remoteJson["id"].Str();
+            debugPrintf("Downloading remote.json from Google Drive with id %s\n",API_CONF.remoteJsonId.c_str());
+            downloadFile(REMOTE_RESOURCE_CONFIG_FILENAME, API_CONF.remoteJsonId);
             
             StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
             remoteResourceRoot = Json::ParseFile(file);

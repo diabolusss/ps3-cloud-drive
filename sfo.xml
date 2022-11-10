@@ -4,7 +4,7 @@
 		01.18
 	</value>
 	<value name="ATTRIBUTE" type="integer">
-		0
+		1
 	</value>
 	<value name="BOOTABLE" type="integer">
 		1
@@ -28,10 +28,10 @@
 		279
 	</value>
 	<value name="TITLE" type="string">
-		PS3 Cloud Drive
+		PS3 Cloud Sync
 	</value>
 	<value name="TITLE_ID" type="string">
-		PS3CLDR
+		PS3CLSC
 	</value>
 	<value name="VERSION" type="string">
 		01.18
