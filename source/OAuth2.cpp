@@ -100,7 +100,7 @@ std::string OAuth2::DeviceAuth()
 
     std::string post =
 			"client_id=" + m_client_id +
-			"&scope=" + http.Escape("email profile ") + http.Escape("https://www.googleapis.com/auth/drive.file");
+			"&scope=" + /*http.Escape("email profile ") +*/ http.Escape("https://www.googleapis.com/auth/drive.file");
             // "scope=" +
             // http.Escape("https://www.googleapis.com/auth/userinfo.email") + http.Escape(" ") +
             // http.Escape("https://docs.google.com/feeds") + http.Escape(" ") + // Deprecated, but still working

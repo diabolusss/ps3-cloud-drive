@@ -794,7 +794,7 @@ std::string registerDevice()
     
     SDL_Surface *codeAuthText = NULL;
     codeAuthText = TTF_RenderText_Blended( Sans, userCodePrint.c_str(), GREY);
-    draw_surface(screen, codeAuthText, (appWidth - codeAuthText->w) / 2, (72 * appHeight) / 100);
+    draw_surface(screen, codeAuthText, (appWidth - codeAuthText->w) / 2, (86 * appHeight) / 100);
 
     u64 epochTime, nsec;
     u64 previousCallTime;

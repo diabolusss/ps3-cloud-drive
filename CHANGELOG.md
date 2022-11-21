@@ -9,7 +9,8 @@ Links
  https://stackoverflow.com/questions/74233277/drive-api-manually-created-file-is-not-found-by-api-using-same-account-oauth2
  https://www.svgrepo.com/page/licensing <- CCO, This license also might be referred as No copyright or CC0 1.0 Universal PD Dedication on our website.
  https://www.svgrepo.com/svg/74684/game-console
-
+ https://issuetracker.google.com/issues/111221778
+ 
 TODO
  - keep google for sync only until it's fixed by Google team (as it can't see user files even in app folder)
  - support koofr api
@@ -29,6 +30,18 @@ TODO
  https://stackoverflow.com/questions/1449055/disk-space-used-free-total-how-do-i-get-this-in-c
     u64 free_space = ((u64)vfs.f_bsize * vfs.f_bfree); // in bytes
     I guess the total space would be using vfs.f_blocks;
+    
+221118
+ - finally app verified by google
+ - found issue tracker  https://issuetracker.google.com/issues/111221778
+ 
+221111
+ - update demo video for google verification
+ - sent feedback (complaint) to google about drive.file limitation bug:
+   I believe that OAuth2 for limited devices has too limited scopes. 
+   Basically because drive.file scope doesn't works as expected.
+     Application have a dedicated folder on Google and user is aware of that. I believe that everything manually saved there  by user should be available to app which is a real owner of that folder. Or at least there should be a respective scope, i.e. drive.app - where application owns all files (have full control) in dedicated folder, including manually added files and folders. 
+   Otherwise there is no point for user to put there anything and it should be forbidden. 
 
 221110
  - continuing app verification for drive.readonly sensitive scope
