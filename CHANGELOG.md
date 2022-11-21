@@ -1,17 +1,3 @@
-Links
-
-- https://zerkman.sector1.fr/ps3/psl1ght/files.html
-- https://github.com/nevik-xx/psl1ght/
-- https://developers.google.com/drive/api/guides/branding <- guadelines for use of google branding (avoid any for faster veryfication)
-- https://creativecommons.org/licenses/by-nc/4.0/ <- free for personal use image license
-- https://pngimg.com/image/50232
-- https://pngimg.com/image/50125
-- https://developers.google.com/terms/api-services-user-data-policy#additional_requirements_for_specific_api_scopes
-- https://stackoverflow.com/questions/74233277/drive-api-manually-created-file-is-not-found-by-api-using-same-account-oauth2
-- https://www.svgrepo.com/page/licensing <- CCO, This license also might be referred as No copyright or CC0 1.0 Universal PD Dedication on our website.
-- https://www.svgrepo.com/svg/74684/game-console
-- https://issuetracker.google.com/issues/111221778
- 
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -80,3 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - add Makefile to run .self in emulator with debug listener (make -f run)
  - workaround to fix directory reading loops (rpcs3 bug)
  - exctract api credentials into non public ('hidden') credentials.h header
+Links
+
+- https://zerkman.sector1.fr/ps3/psl1ght/files.html
+- https://github.com/nevik-xx/psl1ght/
+- https://developers.google.com/drive/api/guides/branding <- guadelines for use of google branding (avoid any for faster veryfication)
+- https://creativecommons.org/licenses/by-nc/4.0/ <- free for personal use image license
+- https://pngimg.com/image/50232
+- https://pngimg.com/image/50125
+- https://developers.google.com/terms/api-services-user-data-policy#additional_requirements_for_specific_api_scopes
+- https://stackoverflow.com/questions/74233277/drive-api-manually-created-file-is-not-found-by-api-using-same-account-oauth2
+- https://www.svgrepo.com/page/licensing <- CCO, This license also might be referred as No copyright or CC0 1.0 Universal PD Dedication on our website.
+- https://www.svgrepo.com/svg/74684/game-console
+- https://issuetracker.google.com/issues/111221778
+ 
