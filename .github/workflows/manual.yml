@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: CSchoel/release-notes-from-changelog@v1
+        with:
+          version: 1.8.0
       # Runs a single command using the runners shell
       - name: Create Release using GitHub CLI
         env:
