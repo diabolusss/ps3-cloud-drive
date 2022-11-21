@@ -1,15 +1,18 @@
-# Changelog
+# Change log
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
 
 ### Added 
+
 ### Fixed 
+
 ### Pending
+
  - keep google for sync only until it's fixed by Google team (as it can't see user files even in app folder)
  - support koofr api
  - use api credentials from config (multiple api support) -> modify isUserAuthenticated() to init OAuth2 variable
@@ -29,12 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     u64 free_space = ((u64)vfs.f_bsize * vfs.f_bfree); // in bytes
     I guess the total space would be using vfs.f_blocks;
 
-## 1.1.8 - 2022-11-18
-### Added
+## [1.1.8] - 2022-11-18
+
+### Changed
+
  - finally app verified by google
  - found issue tracker  https://issuetracker.google.com/issues/111221778
  
-## 221111
+## [] - 221111
+
+### Changed
  - update demo video for google verification
  - sent feedback (complaint) to google about drive.file limitation bug:
    I believe that OAuth2 for limited devices has too limited scopes. 
@@ -42,7 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      Application have a dedicated folder on Google and user is aware of that. I believe that everything manually saved there  by user should be available to app which is a real owner of that folder. Or at least there should be a respective scope, i.e. drive.app - where application owns all files (have full control) in dedicated folder, including manually added files and folders. 
    Otherwise there is no point for user to put there anything and it should be forbidden. 
 
-## 221110
+## [] - 221110
+
+### Changed
  - continuing app verification for drive.readonly sensitive scope
  - finding out that OAuth2 for devices doesn't support that:
     https://developers.google.com/identity/protocols/oauth2/limited-input-device#allowedscopes
@@ -55,7 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     "
  - changed icon/logo and backgrounds;
 
-## 221107 
+## [] - 221107
+
+### Changed
  - add base64.encode;
  - rest: use base64 basic authorization instead of sending credentials in url;
  - oauth2: get registration url instead of local const;
@@ -63,11 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - try to update app config file instead of rewriting it from scratch;
  - json: pretty print to file;
 
-## Previous
+## [0.0.1]
+
+### Changed
  - add Makefile to run .self in emulator with debug listener (make -f run)
  - workaround to fix directory reading loops (rpcs3 bug)
  - exctract api credentials into non public ('hidden') credentials.h header
-Links
+
+
+
+[Links]:
 
 - https://zerkman.sector1.fr/ps3/psl1ght/files.html
 - https://github.com/nevik-xx/psl1ght/
