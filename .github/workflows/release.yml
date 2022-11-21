@@ -9,7 +9,7 @@ jobs:
     name: Create release for this action (with this action :D)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: CSchoel/release-notes-from-changelog@v1
       # use GitHub CLI to create release
       # see https://cli.github.com/manual/gh_release_create
