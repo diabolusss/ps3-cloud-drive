@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     I guess the total space would be using vfs.f_blocks;
 
 ## [1.1.8] - 2022-11-18
+### Added
  - finally app verified by google
  - found issue tracker  https://issuetracker.google.com/issues/111221778
  
