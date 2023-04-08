@@ -25,4 +25,3 @@ jobs:
           -t "Version ${{ github.ref }}"
           ${GITHUB_REF#refs/*/}
           ps3-cloud-drive.pkg
-          release.zip
