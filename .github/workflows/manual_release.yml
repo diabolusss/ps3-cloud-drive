@@ -13,13 +13,17 @@ jobs:
       - name: Extract release notes
         id: extract-release-notes
         uses: ffurrer2/extract-release-notes@v1
+      - name: Zip Folder
+        run: zip -r ${{ github.event.repository.name }}.zip . -x ".git/*" ".github/*" ".gitignore"
+
       - name: Create Release using GitHub CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
           gh release create
           -d          
-          -F README.md
-          -t "Version 1.1.0 ${{ github.ref }}"
+          -n ${{ steps.extract-release-notes.outputs.release_notes }}
+          -t "Version ${{ github.ref }}"
           ${GITHUB_REF#refs/*/}
           ps3-cloud-drive.pkg
+          ${{ github.event.repository.name }}.zip 
