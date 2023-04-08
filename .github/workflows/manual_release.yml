@@ -17,7 +17,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
-          zip -r release.zip .
+          zip -r release.zip . &&
           gh release create
           -d          
           -n ${{ steps.extract-release-notes.outputs.release_notes }}
