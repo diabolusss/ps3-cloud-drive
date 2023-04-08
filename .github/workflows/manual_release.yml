@@ -19,7 +19,7 @@ jobs:
         run: >
           gh release create
           -d          
-          -F RELEASE.md
-          -t "Version $RELEASE_VERSION"
+          -F README.md
+          -t "Version 0.0.1"
           ${GITHUB_REF#refs/*/}
           ps3-cloud-drive.pkg
