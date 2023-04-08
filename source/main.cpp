@@ -878,7 +878,7 @@ void buildLocalResourceTree()
         {
             debugPrintf("  > Reading directory (%s)\n", entry.d_name);
             if(strcmp(previousEntry.c_str(),entry.d_name) == 0){
-                debugPrintf("    Double reading resource (%s) - breaking loop.\n", entry.d_name);
+                debugPrintf("    Double reading resource (%s) - breaking loop (workaround for emulator).\n", entry.d_name);
                 break;
             }
 

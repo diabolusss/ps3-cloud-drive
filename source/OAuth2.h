@@ -24,17 +24,15 @@
 class OAuth2
 {
 	public :
-		std::string m_verification_url; //each api has own url - use that
-		std::string m_scope;
+		std::string m_verification_url; //each api returns own url - use that
+		std::string m_scope;	//each authorization returns granted scope
 
 		OAuth2(
+               const std::string& api_token_url,
+               const std::string& api_device_url,
 				const std::string&	client_id,
-				const std::string&	client_secret 
-			) ;
-		OAuth2(
-				const std::string&	refresh_code,
-				const std::string&	client_id,
-				const std::string&	client_secret 
+				const std::string&	client_secret,
+				const std::string *api_key_map
 			) ;
 
 		std::string Str() const ;
@@ -55,14 +53,19 @@ class OAuth2
 		// adding HTTP auth header
 		std::string HttpHeaderBearer( ) const ;
 		std::string HttpHeaderBasic( ) const ;
-		std::string HostHeader( ) const;
 	
 	private :
 		std::string m_access ;
 		std::string m_refresh ;
 		std::string m_device;
-	
-		const std::string	m_client_id ;
-		const std::string	m_client_secret ;
-		const std::string   m_client_auth_basic;
+
+		//api specific constants
+			const std::string m_api_token_url; 			//api url to retrieve/refresh token
+			const std::string m_api_device_code_url;  	//api url for limited devices auth
+		
+			const std::string	m_client_id ;
+			const std::string	m_client_secret ;
+			const std::string   m_client_auth_basic;
+
+			const std::string *m_api_key_map;			//map of api specific values needed for oauth
 } ;

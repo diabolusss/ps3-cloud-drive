@@ -22,65 +22,33 @@
 #include "JsonResponse.h"
 #include "Header.h"
 #include "Base64.h" //instead of sending plain secret in url, use auth header
+#include "APIHelper.h"
 
 // for debugging
 #include <iostream>
 
-const std::string token_url = "https://www.googleapis.com/oauth2/v4/token";
-const std::string device_url = "https://accounts.google.com/o/oauth2/device/code";
-
 OAuth2::OAuth2(
-               const std::string& refresh_code,
+               const std::string& api_token_url,
+               const std::string& api_device_url,
                const std::string& client_id,
-               const std::string& client_secret) :
-m_refresh(refresh_code),
-m_client_id(client_id),
-m_client_secret(client_secret)
-{
-    Refresh();
-}
-
-OAuth2::OAuth2(
-               const std::string& client_id,
-               const std::string& client_secret) :
-m_client_id(client_id),
-m_client_secret(client_secret),
-m_client_auth_basic(base64_encode(M_ToConstUCharPtr((client_id+":"+client_secret).c_str()), client_id.length()+client_secret.length()+1))
+               const std::string& client_secret,
+               const std::string *api_key_map
+            ) :
+    m_api_token_url(api_token_url),
+    m_api_device_code_url(api_device_url),
+    m_client_id(client_id),
+    m_client_secret(client_secret),
+    m_client_auth_basic(base64_encode(M_ToConstUCharPtr((client_id+":"+client_secret).c_str()), client_id.length()+client_secret.length()+1)),
+    m_api_key_map(api_key_map)
 {
 }
+
 
 /**
- * 
- * 
- */
-std::string OAuth2::Auth()
-{
-    std::string post =
-        "&code=" + m_device +
-        "&grant_type=http://oauth.net/grant_type/device/1.0"
-    ;
-
-    JsonResponse resp;
-    CurlAgent http;
-
-    http.Post(token_url, post, &resp, (Header()+HttpHeaderBasic()));
-
-    std::string authStatus = "not_found";
-    Json root = resp.Response();
-
-    if(root.Has("access_token"))
-    {
-        m_access    = root["access_token"].Str();
-        m_refresh   = root["refresh_token"].Str();
-        m_scope     = root["scope"].Str();
-
-        authStatus = "authorization_complete";
-    }
-    
-    return authStatus;
-}
-
-/**
+ * 1. Request a Device Code
+ *  (And 2. Tell the User to Enter the user_code into form field from verification_url)
+ *  
+ * next @see Auth()
  * 
  * Example: 
  * {
@@ -107,7 +75,7 @@ std::string OAuth2::DeviceAuth()
             // http.Escape("https://www.googleapis.com/auth/userinfo.profile");
             
 
-    http.Post(device_url, post, &resp, Header());
+    http.Post(m_api_device_code_url, post, &resp, Header());
 
     Json root = resp.Response();
 
@@ -125,17 +93,62 @@ std::string OAuth2::DeviceAuth()
     return usercode;
 }
 
+/**
+ * (3. Poll the Token Endpoint)
+ * When the user approves the request, the token endpoint will respond with the access token.
+ * 
+ * Koofr:
+ *  {
+ *      "token_type": "Bearer",
+ *      "access_token": "2XTP7NNLRNMMLT52QQVF*******",
+ *      "expires_in": 3600,
+ *      "refresh_token": "NS6BXWDVTZ7XIK*************",
+ *      "scope": "public"
+ *  }
+ * 
+ */
+std::string OAuth2::Auth()
+{
+    std::string post = "&"
+        + m_api_key_map[DEVICE_CODE_KEY]+"=" + m_device +
+        + "&grant_type=" +m_api_key_map[GRANT_TYPE_VALUE]
+    ;
+
+    JsonResponse resp;
+    CurlAgent http;
+
+    http.Post(m_api_token_url, post, &resp, (Header()+HttpHeaderBasic()));
+
+    std::string authStatus = "not_found";
+    Json root = resp.Response();
+
+    if(root.Has("access_token"))
+    {
+        m_access    = root["access_token"].Str();
+        m_refresh   = root["refresh_token"].Str();
+        m_scope     = root["scope"].Str();
+
+        authStatus = "authorization_complete";
+    }
+    
+    return authStatus;
+}
+
+/**
+ * Refresh access token if available
+*/
 std::string OAuth2::Refresh()
 {
     std::string post =
-            "refresh_token=" + m_refresh +
-            "&grant_type=refresh_token";
+            "refresh_token=" + m_refresh
+            + "&grant_type="+"refresh_token"
+    ;
 
     JsonResponse resp;
     CurlAgent http;
     std::string status = "invalid";
 
-    http.Post(token_url, post, &resp, Header()+HttpHeaderBasic());
+    http.Post(m_api_token_url, post, &resp, Header()+HttpHeaderBasic());
     
     Json root = resp.Response();
 
@@ -196,9 +209,4 @@ std::string OAuth2::HttpHeaderBearer() const
 std::string OAuth2::HttpHeaderBasic() const
 {
     return "Authorization: Basic " + m_client_auth_basic;
-}
-
-std::string OAuth2::HostHeader() const
-{
-    return "Host: accounts.google.com";
 }

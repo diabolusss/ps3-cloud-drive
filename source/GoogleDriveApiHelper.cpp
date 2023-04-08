@@ -5,14 +5,23 @@
 #include "log.h"
 #include "credentials.h"
 #include "Download.h"
+#include "APIHelper.h"
 
 #include <sysutil/msg.h> //msgDialogProgress...
 
+namespace gapi{
+    const std::string api_key_map[E_NUM] = {
+        /* DEVICE_CODE_KEY */ "code",
+        /* GRANT_TYPE_VALUE */ "http://oauth.net/grant_type/device/1.0",
+    };
+}
 const std::string queryFields   = "items(fileSize,id,md5Checksum,mimeType,createdDate,modifiedDate,parents/id,title)";
 const std::string client_id     = GOOGLE_API_ID;
 const std::string client_secret = GOOGLE_API_KEY;
+const std::string token_url     = "https://www.googleapis.com/oauth2/v4/token";
+const std::string device_url    = "https://accounts.google.com/o/oauth2/device/code";
 
-OAuth2 authToken(client_id, client_secret);
+OAuth2 authToken(token_url, device_url, client_id, client_secret, gapi::api_key_map);
 CurlAgent http;
 
 /**

@@ -8,5 +8,9 @@ PS3CloudDrive-1.1.8.pkg
 debug*.log
 **.zip
 tmp/
-
-
+logs/
+.bash_history
+.bash_logout
+.bash_profile
+.bashrc
+.lesshst

@@ -121,7 +121,7 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
 					$(LIBPSL1GHT_LIB)
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
-.PHONY: $(BUILD) clean
+.PHONY: $(BUILD) clean cleanall
 
 #---------------------------------------------------------------------------------
 $(BUILD):
@@ -130,8 +130,14 @@ $(BUILD):
 
 #---------------------------------------------------------------------------------
 clean:
-	@echo clean ...
-	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).self
+	@echo "clean (s)elf..."
+	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).self $(OUTPUT).fake.self
+
+#---------------------------------------------------------------------------------
+cleanall: clean
+	@echo "clean pkg(s)..."
+	@rm -fr $(OUTPUT).pkg $(OUTPUT).gnpdrm.pkg
+	
 
 #---------------------------------------------------------------------------------
 run:
