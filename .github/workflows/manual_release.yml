@@ -19,7 +19,7 @@ jobs:
         run: >
           gh release create
           -d          
-          -F ${{ steps.extract-release-notes.outputs.release_notes }}
-          -t "Version 0.0.1 ${{ github.ref }}"
+          -F README.md
+          -t "Version 1.1.0 ${{ github.ref }}"
           ${GITHUB_REF#refs/*/}
           ps3-cloud-drive.pkg
