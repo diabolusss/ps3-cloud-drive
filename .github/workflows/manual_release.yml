@@ -16,9 +16,8 @@ jobs:
       - name: Create Release using GitHub CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
+        run: >
           zip -r release.zip .
-          >
           gh release create
           -d          
           -n ${{ steps.extract-release-notes.outputs.release_notes }}
