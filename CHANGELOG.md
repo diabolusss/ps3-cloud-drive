@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+@see https://git-scm.com/book/en/v2/Git-Basics-Tagging
 
 ## [Unreleased]
 
@@ -13,10 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Pending
 
- - keep google for sync only until it's fixed by Google team (as it can't see user files even in app folder)
  - support koofr api
- - use api credentials from config (multiple api support) -> modify isUserAuthenticated() to init OAuth2 variable
- - refactor: use bearer oauth class header method instead of manual input
  - implement download only mode (by default from app folder, i.e. from gamesave sync)
  - add support for mode selection
     - sync_only     - backup/restore gamesave data
@@ -36,8 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+ - freeze google api as is (sync only) until it's fixed by Google team (as it can't see user files even in app folder)
  - REFACTOR# Make oauth authorization api independant;
+ - use api credentials from config (multiple api support), located in USRDIR/ps3cloudsync.conf
+ - REFACTOR# use bearer oauth class header method instead of manual input
  - Ready for Koofr API integration
+
  
 ## [1.1.8] - 2022-11-18
 

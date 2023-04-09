@@ -9,8 +9,4 @@ debug*.log
 **.zip
 tmp/
 logs/
-.bash_history
-.bash_logout
-.bash_profile
-.bashrc
-.lesshst
+.*
