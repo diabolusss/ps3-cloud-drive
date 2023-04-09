@@ -1,0 +1,25 @@
+name: ManualCreate Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3  
+      - name: Extract release notes
+        id: extract-release-notes
+        uses: ffurrer2/extract-release-notes@v1
+      - name: Create Release using GitHub CLI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create
+          -d          
+          -n ${{ steps.extract-release-notes.outputs.release_notes }}
+          -t "Version ${{ github.ref }}"
+          ${GITHUB_REF#refs/*/}
+          ps3-cloud-drive.pkg
