@@ -21,10 +21,10 @@
 .SUFFIXES:
 #---------------------------------------------------------------------------------
 ifeq ($(strip $(PSL1GHT)),)
-$(error "Please set PSL1GHT in your environment. export PSL1GHT=<path>")
+  $(error "Please set PSL1GHT in your environment. export PSL1GHT=<path>")
+else
+  include $(PSL1GHT)/ppu_rules
 endif
-
-include $(PSL1GHT)/ppu_rules
 
 #---------------------------------------------------------------------------------
 # TARGET is the name of the output
@@ -46,6 +46,8 @@ PIC1		:=	$(CURDIR)/release/PIC1.PNG
 TITLE		:=	PS3 Cloud Sync
 APPID		:=	PSCS00001
 CONTENTID	:=	CS0001-$(APPID)_00-0000000000000000
+
+$(eval ZIPPER := $(TARGET)_$(shell mktemp -u XXXXXXX))
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -145,6 +147,14 @@ run:
 
 #---------------------------------------------------------------------------------
 pkg:	$(BUILD) $(OUTPUT).pkg
+
+#---------------------------------------------------------------------------------
+tar:
+	tar cfv $(ZIPPER).tar $(SOURCES)/* \
+		Makefile
+zip:
+	zip $(ZIPPER).zip $(SOURCES)/* \
+		Makefile
 	
 #---------------------------------------------------------------------------------
 else

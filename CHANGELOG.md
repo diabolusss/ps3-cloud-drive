@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  https://stackoverflow.com/questions/1449055/disk-space-used-free-total-how-do-i-get-this-in-c
     u64 free_space = ((u64)vfs.f_bsize * vfs.f_bfree); // in bytes
     I guess the total space would be using vfs.f_blocks;
+ - TODO access m_prog_func_last_progress from *clientp @see ApiInterfaceImpl
+
+## [1.2.0] - 2023-04-10
+
+### Changed
+
+ - REFACTOR# move api methods into classes
 
 ## [1.1.9] - 2023-04-08
 

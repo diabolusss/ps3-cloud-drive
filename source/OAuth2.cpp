@@ -27,6 +27,8 @@
 // for debugging
 #include <iostream>
 
+OAuth2::OAuth2(){};
+
 OAuth2::OAuth2(
                const std::string& api_token_url,
                const std::string& api_device_url,

@@ -3,7 +3,7 @@
 
 #include <polarssl/md5.h>
 #include <SDL/SDL_image.h>
-#include <sys/systime.h>
+#include <sys/systime.h> //sysUsleep
 
 std::string epochTsToString(time_t *ts){
     char dt[28];

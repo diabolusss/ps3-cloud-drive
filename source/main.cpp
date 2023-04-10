@@ -52,7 +52,7 @@
 #include "main.h"
 #include "MainHelper.h"
 
-#include "GoogleDriveApiHelper.h"
+#include "GoogleApiImpl.h"
 
 /*  Function declarations  */
     void get_free_memory();
@@ -86,11 +86,12 @@ const std::string LOCAL_RESOURCE_CONFIG_FILENAME     = APP_PATH+"local.json";
 const std::string REMOTE_RESOURCE_CONFIG_FILENAME    = APP_PATH+"remote.json";
 const std::string REMOTE_RESOURCE_CONFIG_BACKUP      = APP_PATH+"remote.backup";
 
-extern OAuth2 authToken;
+OAuth2* authToken;
+APIInterface *api;
 
 /** app configuration file variables */
 typedef struct {
-    std::string selectedApi = "google"; //by default use google api config
+    std::string selectedApi = "google"; //by default use google api config (limited)
     std::string rootFolderId = "root";
     std::string deviceId     = "nill";
     std::string remoteJsonId = "root";
@@ -101,7 +102,7 @@ typedef struct {
 SelectedApiConf_t API_CONF;
 
 Json localResourceRoot;
-Json remoteResourceRoot;
+Json* remoteResourceRoot;
 
 SDL_Event event;
 SDL_Surface* screen = NULL;
@@ -306,12 +307,12 @@ void storeConfig()
             appConfig.Add("default_api",    Json(API_CONF.selectedApi));                    
         }
 
-            selectedApiConf.Add("refresh_token",  Json(authToken.RefreshToken()));
-            selectedApiConf.Add("device_id",      Json(authToken.DeviceCode())); //oauth2 device code
+            selectedApiConf.Add("refresh_token",  Json(authToken->RefreshToken()));
+            selectedApiConf.Add("device_id",      Json(authToken->DeviceCode())); //oauth2 device code
             selectedApiConf.Add("last_sync",      Json(epochTsToString((time_t*) &API_CONF.curr_sync_ts)));
             selectedApiConf.Add("remote_fid",     Json(API_CONF.remoteJsonId));
             selectedApiConf.Add("root_id",        Json(API_CONF.rootFolderId));
-            selectedApiConf.Add("scope",          Json(authToken.getScope()));
+            selectedApiConf.Add("scope",          Json(authToken->getScope()));
         appConfig.Add(API_CONF.selectedApi, selectedApiConf);
     }
 
@@ -374,6 +375,14 @@ std::string isUserAuthenticated()
         }
     }
     
+    //init Oauth token based on default api
+    if(API_CONF.selectedApi == "google"){ 
+        api = new GoogleApiImpl();
+        authToken           = api->m_auth_token;
+        remoteResourceRoot  = &api->m_remote_resource_root;
+    }else if(API_CONF.selectedApi == "koofr"){ 
+    }
+
     return result;
 }
 
@@ -417,10 +426,10 @@ std::string getDirectoryIdByName(std::string folderName)
     }
     else
     {
-        int remSize = remoteResourceRoot["data"].AsArray().size();
+        int remSize = (*remoteResourceRoot)["data"].AsArray().size();
         for(int i=0; i < remSize; i++)
         {
-            Json resource = remoteResourceRoot["data"][i];
+            Json resource = (*remoteResourceRoot)["data"][i];
             if(resource["mimeType"].Str() == DIR_MIME)
             {
                 if(resource["title"].Str() == folderName)
@@ -444,12 +453,12 @@ void writeRemoteResourceChangesToFile()
     debugPrintf("writeRemoteResourceChangesToFile: initiating remote.json write...\n");
     //Backup remote.json before a write to save from any catastrophies
     StdioFile backup(REMOTE_RESOURCE_CONFIG_BACKUP, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
-    remoteResourceRoot.WriteFile(backup);
+    remoteResourceRoot->WriteFile(backup);
     backup.Close();
     sysFsChmod(REMOTE_RESOURCE_CONFIG_BACKUP.c_str(),0644);
     
     StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME, SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);
-    remoteResourceRoot.WriteFile(file);
+    remoteResourceRoot->WriteFile(file);
     file.Close();
     sysFsChmod(REMOTE_RESOURCE_CONFIG_FILENAME.c_str(),0644);
     
@@ -464,7 +473,7 @@ void uploadChanges()
     // First make sure that all folders are uploaded, we need this because file
     // resources in Google Drive don't have paths, instead they rely on
     // parent ids
-    u32 remSize = remoteResourceRoot["data"].AsArray().size();
+    u32 remSize = (*remoteResourceRoot)["data"].AsArray().size();
     u32 i=0;
     u32 syncJson = 0;
     u32 progressCounter =0;
@@ -475,7 +484,7 @@ void uploadChanges()
     
     for(i=0; i < remSize; i++)
     {
-        Json resource = remoteResourceRoot["data"][i];
+        Json resource = (*remoteResourceRoot)["data"][i];
         if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY || resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPDATE_KEY)
         {
             totalProgress++;
@@ -491,7 +500,7 @@ void uploadChanges()
     {
         if(dialog_action != 0) { syncJson = 0; break; }
         
-        Json resource = remoteResourceRoot["data"][i];
+        Json resource = (*remoteResourceRoot)["data"][i];
         
         if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY)
         {
@@ -506,15 +515,15 @@ void uploadChanges()
             msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 0);
             msgDialogProgressBarSetMsg(MSG_PROGRESSBAR_INDEX1, resource["path"].Str().c_str());
 
-            Json obj = uploadDirectory(resource["title"].Str(),result);
+            Json obj = api->uploadDirectory(resource["title"].Str(),result);
             if(!obj.Has("id")){ continue; }
             
             msgDialogProgressBarInc(MSG_PROGRESSBAR_INDEX1, 100);
             
-            remoteResourceRoot["data"][i].Add("id",Json(obj["id"].Str()));
-            remoteResourceRoot["data"][i].Add("parentid",Json(result));
-            remoteResourceRoot["data"][i].Add("modifiedDate",Json(obj["modifiedDate"].Str()));
-            remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
+            (*remoteResourceRoot)["data"][i].Add("id",Json(obj["id"].Str()));
+            (*remoteResourceRoot)["data"][i].Add("parentid",Json(result));
+            (*remoteResourceRoot)["data"][i].Add("modifiedDate",Json(obj["modifiedDate"].Str()));
+            (*remoteResourceRoot)["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
             writeRemoteResourceChangesToFile();
             
             syncJson = 1;
@@ -547,7 +556,7 @@ void uploadChanges()
     {   
         if(dialog_action != 0) {break; }
         
-        Json resource = remoteResourceRoot["data"][i];
+        Json resource = (*remoteResourceRoot)["data"][i];
         
         if(resource["status"].Str() == RESOURCE_REMOTE_STATUS_UPLOAD_KEY)
         {
@@ -559,16 +568,16 @@ void uploadChanges()
                 {
                     debugPrintf("  > uploadChanges: Creating file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
-                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result);
+                    Json obj = api->uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result);
                     
                     if(!obj.Has("id")){continue;}
                     
-                    remoteResourceRoot["data"][i].Add("id", Json(obj["id"].Str()));
-                    remoteResourceRoot["data"][i].Add("parentid", Json(result));
-                    remoteResourceRoot["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
-                    remoteResourceRoot["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
-                    remoteResourceRoot["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
-                    remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
+                    (*remoteResourceRoot)["data"][i].Add("id", Json(obj["id"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("parentid", Json(result));
+                    (*remoteResourceRoot)["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
 
                     writeRemoteResourceChangesToFile();
                     syncJson = 1;
@@ -607,14 +616,14 @@ void uploadChanges()
                 {
                     debugPrintf("  > uploadChanges: Re-visioning file with name %s under %s\n",resource["title"].Str().c_str(), result.c_str() );
                     
-                    Json obj = uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result, resource["id"].Str());
+                    Json obj = api->uploadFile(resource["path"].Str(),resource["title"].Str(),OCTET_MIME,result, resource["id"].Str());
 
                     if(!obj.Has("id")) {continue;}
                     
-                    remoteResourceRoot["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
-                    remoteResourceRoot["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
-                    remoteResourceRoot["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
-                    remoteResourceRoot["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
+                    (*remoteResourceRoot)["data"][i].Add("modifiedDate", Json(obj["modifiedDate"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("fileSize",  Json(obj["fileSize"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("md5Checksum", Json(obj["md5Checksum"].Str()));
+                    (*remoteResourceRoot)["data"][i].Add("status", Json(RESOURCE_REMOTE_STATUS_SYNCED_KEY));
 
                     writeRemoteResourceChangesToFile();
                     syncJson = 1;
@@ -649,7 +658,7 @@ void uploadChanges()
     if(API_CONF.remoteJsonId == "root")
     {
         Json remJson;
-        remJson = uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId);
+        remJson = api->uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId);
         if(remJson.Has("id"))
         {
             API_CONF.remoteJsonId = remJson["id"].Str();
@@ -659,7 +668,7 @@ void uploadChanges()
     else if(syncJson == 1)
     {
         debugPrintf("Updating remote.json on the server...\n" );
-        uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId,API_CONF.remoteJsonId);
+        api->uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId,API_CONF.remoteJsonId);
     }
 }
 
@@ -678,7 +687,7 @@ void detectChangesForSync()
     // 2 - If an entry exists in local and in remote, check if it's changed by size (folder can be ignored)
     
     u32 lrtSize = localResourceRoot["data"].AsArray().size();
-    u32 rrtSize = remoteResourceRoot.Has("data") ? remoteResourceRoot["data"].AsArray().size() : 0;
+    u32 rrtSize = remoteResourceRoot->Has("data") ? (*remoteResourceRoot)["data"].AsArray().size() : 0;
     u32 i = 0;
     u32 j = 0;
     u32 prevProgress = 0;
@@ -698,7 +707,7 @@ void detectChangesForSync()
         
         for(j=0; j < rrtSize; j++)
         {
-            Json rres = remoteResourceRoot["data"][j];
+            Json rres = (*remoteResourceRoot)["data"][j];
             
             if(lres["path"].Str() == rres["path"].Str())
             {
@@ -733,7 +742,7 @@ void detectChangesForSync()
                             if(md5c != rres["md5Checksum"].Str())
                             {    
                                 debugPrintf("Local file MD5 has been changed %s,%s,%s\n", rres["path"].Str().c_str(),md5c.c_str(),rres["md5Checksum"].Str().c_str());
-                                remoteResourceRoot["data"][j].Add("status", Json(RESOURCE_REMOTE_STATUS_UPDATE_KEY));
+                                (*remoteResourceRoot)["data"][j].Add("status", Json(RESOURCE_REMOTE_STATUS_UPDATE_KEY));
                             }
                         }
                     }
@@ -744,7 +753,7 @@ void detectChangesForSync()
         if(!found)
         {
             debugPrintf("  > Found New Entry in Local Resource, Adding for sync %s\n", lres["path"].Str().c_str());
-            remoteResourceRoot["data"].Add(lres);
+            (*remoteResourceRoot)["data"].Add(lres);
         }
         
         std::stringstream ss;
@@ -783,13 +792,13 @@ std::string registerDevice()
     std::string usercode;
 
     debugPrintf("  Device Authentication Function Called...\n");
-    usercode = authToken.DeviceAuth();
+    usercode = authToken->DeviceAuth();
 
-    debugPrintf("  > Device Code:  %s \n", authToken.DeviceCode().c_str());
+    debugPrintf("  > Device Code:  %s \n", authToken->DeviceCode().c_str());
     debugPrintf("  > User Code:  %s \n", usercode.c_str());
     
     std::string userCodePrint = "Your User Code is: " + usercode 
-            + "\n\n Please visit "+authToken.getDeviceVerificationUrl().c_str()+" for approval"
+            + "\n\n Please visit "+authToken->getDeviceVerificationUrl().c_str()+" for approval"
         ;
     
     SDL_Surface *codeAuthText = NULL;
@@ -808,7 +817,7 @@ std::string registerDevice()
         if (epochTime - previousCallTime > 10)
         {
             debugPrintf("   Polling for user authentication....\n");
-            authStatus = authToken.Auth();
+            authStatus = authToken->Auth();
             previousCallTime = epochTime;
         }
     }
@@ -823,14 +832,14 @@ void buildRemoteResourceTree()
 {
     std::vector<Json> resourceTree;
     std::vector<std::string> foldersToTraverse;
-    Json resourceObject = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,API_CONF.rootFolderId);
+    Json resourceObject = api->checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,API_CONF.rootFolderId);
     if(resourceObject.Has("id"))
     {
         resourceTree.push_back(Json(resourceObject));
         foldersToTraverse.push_back(resourceObject["id"].Str());
         while(foldersToTraverse.size() > 0)
         {
-            Json::Array tempArray = getResourcesUnderFolder(foldersToTraverse.back());
+            Json::Array tempArray = api->getResourcesUnderFolder(foldersToTraverse.back());
             if(!tempArray.empty())
             {
                 for ( Json::Array::iterator i = tempArray.begin() ; i != tempArray.end() ; ++i )
@@ -846,7 +855,7 @@ void buildRemoteResourceTree()
     
     debugPrintf("Remote Resource Tree built, writing to Remote Resource Json\n");
 
-    remoteResourceRoot.Add("data",Json(resourceTree));
+    remoteResourceRoot->Add("data",Json(resourceTree));
     
     writeRemoteResourceChangesToFile();
 }
@@ -1098,10 +1107,10 @@ int initCloudDrive(void *arg)
             , authStatus.c_str(), API_CONF.deviceId.c_str(), API_CONF.api_scope.c_str()
         );
 
-        authToken.setRefreshToken(authStatus);
-        authToken.setDeviceCode(API_CONF.deviceId);
-        authToken.setScope(API_CONF.api_scope);      
-        if (authToken.Refresh() != "valid")
+        authToken->setRefreshToken(authStatus);
+        authToken->setDeviceCode(API_CONF.deviceId);
+        authToken->setScope(API_CONF.api_scope);      
+        if (authToken->Refresh() != "valid")
         {
             debugPrintf("  Token Read from file was invalid, need to Re-Authenticate");
             registerDevice();
@@ -1123,7 +1132,7 @@ int initCloudDrive(void *arg)
     msgDialogOpen2(dialog_type, "Performing Sync...", dialog_handler, NULL, NULL);
     
     //If user new but remote data exists
-    Json rootResource = checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,"root");
+    Json rootResource = api->checkIfRemoteResourceExists(APP_TITLE,DIR_MIME,"root");
     if(rootResource.Has("id"))
     {
         API_CONF.rootFolderId = rootResource["id"].Str();
@@ -1134,7 +1143,7 @@ int initCloudDrive(void *arg)
     {
         debugPrintf("User has no previous data on Google Drive\n");
         Json rtId;
-        rtId = uploadDirectory(APP_TITLE,"root");
+        rtId = api->uploadDirectory(APP_TITLE,"root");
         
         if(rtId.Has("id"))
         {
@@ -1163,11 +1172,11 @@ int initCloudDrive(void *arg)
     if(userType == "one")
     {
         StdioFile file(LOCAL_RESOURCE_CONFIG_FILENAME);
-        remoteResourceRoot = Json::ParseFile(file);
+        *remoteResourceRoot = Json::ParseFile(file);
         file.Close();
 
         StdioFile file2(REMOTE_RESOURCE_CONFIG_FILENAME);
-        remoteResourceRoot.WriteFile(file2);
+        remoteResourceRoot->WriteFile(file2);
         file.Close();
 
         uploadChanges();
@@ -1188,13 +1197,13 @@ int initCloudDrive(void *arg)
         debugPrintf("Reading local remote.json config.\n");
         StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
         if(file.Exists() == true){		
-            remoteResourceRoot = Json::ParseFile(file);
+            *remoteResourceRoot = Json::ParseFile(file);
             file.Close();
             
             detectChangesForSync();
             
             uploadChanges();
-            downloadChanges(&dialog_action);
+            api->downloadChanges(&dialog_action);
         }else{
             debugPrintf("File %s doesn't exist\n", file.filepath().c_str());
             userType = "three";
@@ -1208,26 +1217,26 @@ int initCloudDrive(void *arg)
     if(userType == "three")
     {
         debugPrintf("Checking for remote.json (userType=3) on Google Drive with root_id %s\n",API_CONF.rootFolderId.c_str());
-        Json remoteJson = checkIfRemoteResourceExists("remote.json",JSON_MIME,API_CONF.rootFolderId);
+        Json remoteJson = api->checkIfRemoteResourceExists("remote.json",JSON_MIME,API_CONF.rootFolderId);
         
         if(remoteJson.Has("id"))
         {
             API_CONF.remoteJsonId = remoteJson["id"].Str();
             debugPrintf("Downloading remote.json from Google Drive with id %s\n",API_CONF.remoteJsonId.c_str());
-            downloadFile(REMOTE_RESOURCE_CONFIG_FILENAME, API_CONF.remoteJsonId);
+            api->downloadFile(REMOTE_RESOURCE_CONFIG_FILENAME, API_CONF.remoteJsonId);
             
             StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
-            remoteResourceRoot = Json::ParseFile(file);
+            *remoteResourceRoot = Json::ParseFile(file);
             file.Close();
             
-            downloadChanges(&dialog_action);
+            api->downloadChanges(&dialog_action);
             debugPrintf("Data from Google Drive downloaded, Please restart app to upload changes\n");
         }
         else
         {    
             debugPrintf("Wow, there's no remote.json on Google Drive!\n");
             buildRemoteResourceTree();
-            downloadChanges(&dialog_action);
+            api->downloadChanges(&dialog_action);
         }
     } 
 

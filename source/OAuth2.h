@@ -27,6 +27,8 @@ class OAuth2
 		std::string m_verification_url; //each api returns own url - use that
 		std::string m_scope;	//each authorization returns granted scope
 
+		OAuth2();
+
 		OAuth2(
                const std::string& api_token_url,
                const std::string& api_device_url,
