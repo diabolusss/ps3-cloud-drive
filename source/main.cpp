@@ -53,6 +53,7 @@
 #include "MainHelper.h"
 
 #include "GoogleApiImpl.h"
+#include "KoofrApiImpl.h"
 
 /*  Function declarations  */
     void get_free_memory();
@@ -380,9 +381,13 @@ std::string isUserAuthenticated()
         api = new GoogleApiImpl();
         authToken           = api->m_auth_token;
         remoteResourceRoot  = &api->m_remote_resource_root;
-    }else if(API_CONF.selectedApi == "koofr"){ 
-    }
 
+    }else if(API_CONF.selectedApi == "koofr"){ 
+        api = new KoofrApiImpl();
+        authToken           = api->m_auth_token;
+        remoteResourceRoot  = &api->m_remote_resource_root;
+    }
+            
     return result;
 }
 
@@ -1112,7 +1117,7 @@ int initCloudDrive(void *arg)
         authToken->setScope(API_CONF.api_scope);      
         if (authToken->Refresh() != "valid")
         {
-            debugPrintf("  Token Read from file was invalid, need to Re-Authenticate");
+            debugPrintf("  Token Read from file was invalid, need to Re-Authenticate\n");
             registerDevice();
         }
     }

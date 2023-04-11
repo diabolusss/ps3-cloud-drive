@@ -20,7 +20,7 @@
 #pragma once
 
 #include <string>
-
+#include <vector>
 class OAuth2
 {
 	public :
@@ -34,7 +34,7 @@ class OAuth2
                const std::string& api_device_url,
 				const std::string&	client_id,
 				const std::string&	client_secret,
-				const std::string *api_key_map
+				const std::vector<std::string>  *api_key_map
 			) ;
 
 		std::string Str() const ;
@@ -68,6 +68,6 @@ class OAuth2
 			const std::string	m_client_id ;
 			const std::string	m_client_secret ;
 			const std::string   m_client_auth_basic;
-
-			const std::string *m_api_key_map;			//map of api specific values needed for oauth
+	
+			const std::vector<std::string> *m_api_key_map; //map of api specific values needed for oauth
 } ;

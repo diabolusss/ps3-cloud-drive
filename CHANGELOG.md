@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Pending
 
  - support koofr api
+    - search files
+    - upload files
+    - download files
+    - root id selection
  - implement download only mode (by default from app folder, i.e. from gamesave sync)
  - add support for mode selection
     - sync_only     - backup/restore gamesave data
@@ -30,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     u64 free_space = ((u64)vfs.f_bsize * vfs.f_bfree); // in bytes
     I guess the total space would be using vfs.f_blocks;
  - TODO access m_prog_func_last_progress from *clientp @see ApiInterfaceImpl
+
+## [1.2.1] - 2023-04-10
+
+### Changed
+
+ - fix OAuth portability
+ - Koofr: device auth ok
 
 ## [1.2.0] - 2023-04-10
 

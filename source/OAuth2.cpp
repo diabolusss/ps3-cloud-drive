@@ -22,7 +22,7 @@
 #include "JsonResponse.h"
 #include "Header.h"
 #include "Base64.h" //instead of sending plain secret in url, use auth header
-#include "APIHelper.h"
+#include "APIHelper.h" //enum OAUTH_API_PARAM_KEYS
 
 // for debugging
 #include <iostream>
@@ -34,7 +34,7 @@ OAuth2::OAuth2(
                const std::string& api_device_url,
                const std::string& client_id,
                const std::string& client_secret,
-               const std::string *api_key_map
+               const std::vector<std::string> *api_key_map
             ) :
     m_api_token_url(api_token_url),
     m_api_device_code_url(api_device_url),
@@ -44,7 +44,6 @@ OAuth2::OAuth2(
     m_api_key_map(api_key_map)
 {
 }
-
 
 /**
  * 1. Request a Device Code
@@ -58,7 +57,7 @@ OAuth2::OAuth2(
  *   "user_code": "RJX-PSB-XTX",
  *   "expires_in": 1800,
  *   "interval": 5,
- *   "verification_url": "https://www.google.com/device"
+ *   "verification_url": "https://service.domain/device"
  * }
  */
 std::string OAuth2::DeviceAuth()
@@ -67,15 +66,10 @@ std::string OAuth2::DeviceAuth()
     CurlAgent http;
 
     std::string usercode;
-
     std::string post =
 			"client_id=" + m_client_id +
-			"&scope=" + /*http.Escape("email profile ") +*/ http.Escape("https://www.googleapis.com/auth/drive.file");
-            // "scope=" +
-            // http.Escape("https://www.googleapis.com/auth/userinfo.email") + http.Escape(" ") +
-            // http.Escape("https://docs.google.com/feeds") + http.Escape(" ") + // Deprecated, but still working
-            // http.Escape("https://www.googleapis.com/auth/userinfo.profile");
-            
+			"&scope=" + (*m_api_key_map)[DEVICE_GRANT_SCOPE_VALUE]
+    ;
 
     http.Post(m_api_device_code_url, post, &resp, Header());
 
@@ -85,7 +79,7 @@ std::string OAuth2::DeviceAuth()
     {
         m_device = root["device_code"].Str();
         usercode = root["user_code"].Str();
-        m_verification_url = root["verification_url"].Str();
+        m_verification_url = root[(*m_api_key_map)[DEVICE_CODE_USER_URL]].Str();
     }
     else
     {
@@ -112,8 +106,8 @@ std::string OAuth2::DeviceAuth()
 std::string OAuth2::Auth()
 {
     std::string post = "&"
-        + m_api_key_map[DEVICE_CODE_KEY]+"=" + m_device +
-        + "&grant_type=" +m_api_key_map[GRANT_TYPE_VALUE]
+        + (*m_api_key_map)[DEVICE_CODE_KEY]+"=" + m_device +
+        + "&grant_type=" +(*m_api_key_map)[GRANT_TYPE_VALUE]
     ;
 
     JsonResponse resp;

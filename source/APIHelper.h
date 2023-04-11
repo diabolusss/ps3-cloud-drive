@@ -20,10 +20,10 @@
 
 #pragma once
 
+//each *APIImpl.h header implmentation must be in sync with this enum
 typedef enum {
     DEVICE_CODE_KEY,
     GRANT_TYPE_VALUE,
-
-    //keep last enum as enum values count marker
-    E_NUM
+    DEVICE_GRANT_SCOPE_VALUE,
+    DEVICE_CODE_USER_URL,
 } OAUTH_API_PARAM_KEYS;
