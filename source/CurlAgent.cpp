@@ -69,7 +69,7 @@ int debug_cb ( CURL *handle, curl_infotype type, char *data, size_t size, void *
                 break;
         }
         case CURLINFO_HEADER_IN: {
-                debugPrintf("RESPONSE HDR: %s", data);
+                debugPrintf("RESPONSE HDR: %s\n", data);
                 break;
         }
         case CURLINFO_HEADER_OUT: { //There is no null-terminator on this one !
@@ -123,7 +123,7 @@ void CurlAgent::Init()
     //::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYHOST, 2L);
 	::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYPEER, FALSE);
     ::curl_easy_setopt(m_pimpl->curl, CURLOPT_SSL_VERIFYHOST, FALSE);
-    ::curl_easy_setopt(m_pimpl->curl, CURLOPT_CAINFO, "/dev_hdd0/game/PSCD00001/USRDIR/cacert.pem");  // path to Certificate Authority (CA) bundle
+    ::curl_easy_setopt(m_pimpl->curl, CURLOPT_CAINFO, "/dev_hdd0/game/PSCS00001/USRDIR/cacert.pem");  // path to Certificate Authority (CA) bundle
                                                                                                     // If CURLOPT_SSL_VERIFYPEER is zero 
                                                                                                     //  and you avoid verifying the server's certificate, 
                                                                                                     //  CURLOPT_CAINFO need not even indicate an accessible file.
@@ -172,13 +172,15 @@ long CurlAgent::ExecCurl(
     ::curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &CurlAgent::Receive);
     ::curl_easy_setopt(curl, CURLOPT_WRITEDATA, dest);
     //::curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60);
-    ::curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30);
-    ::curl_easy_setopt(curl, CURLOPT_ENCODING, "gzip,deflate");
+    ::curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30);    
     ::curl_easy_setopt(curl, CURLOPT_USERAGENT, "PS3 Cloud Drive (gzip)");
     ::curl_easy_setopt(curl, CURLOPT_SSL_CIPHER_LIST, "TLS-RSA-WITH-AES-128-GCM-SHA256");
     #ifdef _DEBUG
+    ::curl_easy_setopt(curl, CURLOPT_ENCODING, "identity"); //instruct to not encode data
     ::curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); //the DEBUGFUNCTION has no effect until we enable VERBOSE
     ::curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, debug_cb);
+    #else
+    ::curl_easy_setopt(curl, CURLOPT_ENCODING, "gzip,deflate");
     #endif
 
     SetHeader(hdr);

@@ -44,6 +44,7 @@ ICON0		:=	$(CURDIR)/release/ICON0.PNG
 PIC1		:=	$(CURDIR)/release/PIC1.PNG
 
 TITLE		:=	PS3 Cloud Sync
+#NB if changed, then fix CurlAgent.cpp:155 (path to certificate.pem)
 APPID		:=	PSCS00001
 CONTENTID	:=	CS0001-$(APPID)_00-0000000000000000
 
