@@ -60,6 +60,8 @@ class GoogleApiImpl: public APIInterface {
         Json uploadFile(std::string path, std::string filename, std::string mimeType, std::string parentId, std::string fileId = "");
         Json uploadDirectory(std::string dirName, std::string parentId);
 
+        Json getRootMountId(){return Json();} //not implemented
+
     private:
         const std::string queryFields   = "items(fileSize,id,md5Checksum,mimeType,createdDate,modifiedDate,parents/id,title)";
     

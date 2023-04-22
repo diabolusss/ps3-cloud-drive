@@ -398,6 +398,33 @@ Json GoogleApiImpl::uploadFile(std::string path, std::string filename, std::stri
 
 /**
  * Creates a directory on the google drive
+ * 
+ * API Response:
+ * {
+    "parents": [
+        {
+            "id": "0AIUOHjtY_mQkUk9PVA"
+        }
+    ],
+    "id": "1Bwn-72gMkpdPvE4EMSBdu_Z6YEnGAjq_",
+    "modifiedDate": "2023-04-16T20:06:11.926Z"
+ * }
+ *
+ * {
+    "error": {
+        "code": 404,
+        "message": "File not found: ROOT",
+        "errors": [
+        {
+            "message": "File not found: ROOT",
+            "domain": "global",
+            "reason": "notFound",
+            "location": "file",
+            "locationType": "other"
+        }
+        ]
+    }
+ * }
  * @param dirName the name to give the directory
  * @param parentId the parentid of this directory, default is root
  * @return the created folder resource in Json format
@@ -432,7 +459,7 @@ Json GoogleApiImpl::uploadDirectory(std::string dirName, std::string parentId)
     obj = resp.Response();
     if (obj.Has("id"))
     {
-        debugPrintf("Folder id is %d, %s\n", ret, obj["id"].Str().c_str());
+        debugPrintf("Folder id is %s\n", obj["id"].Str().c_str());
     }
     else
     {

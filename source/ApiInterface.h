@@ -76,4 +76,7 @@ class APIInterface {
                 virtual void downloadChanges(int *dialog_action) = 0;
                 virtual Json uploadFile(std::string path, std::string filename, std::string mimeType, std::string parentId, std::string fileId = "") = 0;
                 virtual Json uploadDirectory(std::string dirName, std::string parentId) = 0;
+
+                virtual Json getRootMountId() = 0;
+                //virtual std::string search() = 0;
 };

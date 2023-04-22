@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     u64 free_space = ((u64)vfs.f_bsize * vfs.f_bfree); // in bytes
     I guess the total space would be using vfs.f_blocks;
  - TODO access m_prog_func_last_progress from *clientp @see ApiInterfaceImpl
+ - TODO extract ApiConfiguration into separate file
+ 
+## [1.2.1.1] - 2023-04-10
+
+### Changed
+
+ - Koofr: get storage backend root id
+ - refactor: change SelectedApiConf_t struct to ApiConfiguration class
 
 ## [1.2.1] - 2023-04-10
 

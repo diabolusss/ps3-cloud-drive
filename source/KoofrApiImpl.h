@@ -37,30 +37,13 @@ class KoofrApiImpl: public APIInterface {
                 "https://app.koofr.net/oauth2/devicecode"
             )
         {
-           // const std::string _map[E_NUM] = {
-             //       /* DEVICE_CODE_KEY */           //"device_code",
-               //     "device_code",
-                //    /* GRANT_TYPE_VALUE */          //"urn:ietf:params:oauth:grant-type:device_code",
-                 //   "test",
-                  //  /* DEVICE_GRANT_SCOPE_VALUE */  "public"
-           // };
             m_api_key_map = {
                     /* DEVICE_CODE_KEY */           "device_code",
                     /* GRANT_TYPE_VALUE */          "urn:ietf:params:oauth:grant-type:device_code",
                     /* DEVICE_GRANT_SCOPE_VALUE */  "public",
                     /* DEVICE_CODE_USER_URL */      "verification_uri"
             };
-            //debugPrintf("  init.%d\n", E_NUM);
-            //debugPrintf("  init[%d].%s\n", GRANT_TYPE_VALUE, _map[GRANT_TYPE_VALUE].c_str());
-            //debugPrintf("  init[%d].%s\n", DEVICE_CODE_KEY, _map[DEVICE_CODE_KEY].c_str());
-            //debugPrintf("  init[%d].%s\n", DEVICE_GRANT_SCOPE_VALUE, _map[DEVICE_GRANT_SCOPE_VALUE].c_str());
-            //m_api_key_map = _map;
-
-            /*debugPrintf("  init[%d].%s\n", GRANT_TYPE_VALUE, m_api_key_map[GRANT_TYPE_VALUE].c_str());
-            debugPrintf("  init[%d].%s\n", DEVICE_CODE_KEY, m_api_key_map[DEVICE_CODE_KEY].c_str());
-            debugPrintf("  init[%d].%s\n", DEVICE_GRANT_SCOPE_VALUE, m_api_key_map[DEVICE_GRANT_SCOPE_VALUE].c_str());
-            */init();
-            //m_auth_token->vec2 = &vec;
+            init();
         }
 
         //derived virtual methods for implementation
@@ -70,6 +53,7 @@ class KoofrApiImpl: public APIInterface {
         void downloadChanges(int *dialog_action);
         Json uploadFile(std::string path, std::string filename, std::string mimeType, std::string parentId, std::string fileId = "");
         Json uploadDirectory(std::string dirName, std::string parentId);
+        Json getRootMountId();
 
     private:
         const std::string queryFields   = "items(fileSize,id,md5Checksum,mimeType,createdDate,modifiedDate,parents/id,title)";

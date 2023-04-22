@@ -38,8 +38,8 @@ Json KoofrApiImpl::checkIfRemoteResourceExists(std::string resourceTitle,std::st
     long ret;
     Json resourceObject;
     
-    Header hdr;
-    hdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    Header hdr;    
+    hdr.Add(m_auth_token->HttpHeaderBearer());
     
     std::string query="mimeType='"+mimeType+"' and trashed=false and title='"+resourceTitle+"' and '"+parentId+"' in parents"; 
     JsonResponse resp;
@@ -82,8 +82,8 @@ Json::Array KoofrApiImpl::getResourcesUnderFolder(std::string parentId)
     long ret;
     Json::Array parsedArray;
     
-    Header hdr;
-    hdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    Header hdr;    
+    hdr.Add(m_auth_token->HttpHeaderBearer());
     
     std::string query=parentId+"' in parents"; 
     JsonResponse resp;
@@ -116,7 +116,7 @@ bool KoofrApiImpl::downloadFile(std::string localPath, std::string fileId)
     Download file(localPath);
     
     Header hdr;
-    hdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    hdr.Add(m_auth_token->HttpHeaderBearer());
 
     JsonResponse resp;
 
@@ -321,7 +321,7 @@ Json KoofrApiImpl::uploadFile(std::string path, std::string filename, std::strin
     xcontent_len << "X-Upload-Content-Length: " << file.Size();
 
     Header hdr;
-    hdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    hdr.Add(m_auth_token->HttpHeaderBearer());
     hdr.Add("Content-Type: application/json");
     hdr.Add("X-Upload-Content-Type: " + mimeType);
     hdr.Add(xcontent_len.str());
@@ -357,7 +357,7 @@ Json KoofrApiImpl::uploadFile(std::string path, std::string filename, std::strin
     content_len << "Content-Length: " << file.Size();
     
     Header uphdr;
-    uphdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    hdr.Add(m_auth_token->HttpHeaderBearer());
     uphdr.Add("Content-Type: " + mimeType);
     uphdr.Add(content_len.str());
     uphdr.Add("Expect:" );
@@ -399,8 +399,8 @@ Json KoofrApiImpl::uploadFile(std::string path, std::string filename, std::strin
  * Creates a directory on the web drive
  * 
  * @param dirName the name to give the directory
- * @param parentId the parentid of this directory, default is root
- * @return the created folder resource in Json format
+ * @param parentId the parentid of this directory - selected cloud engine place id(primary - koofr; uid - googledrive, dropbox)
+ * @return success ( Koofer files/folders doesn't have ids)
  */
 Json KoofrApiImpl::uploadDirectory(std::string dirName, std::string parentId)
 {
@@ -409,38 +409,179 @@ Json KoofrApiImpl::uploadDirectory(std::string dirName, std::string parentId)
 
     //Step 1 - Creating SaveData Directory Online
     Header hdr;
-    hdr.Add("Authorization: Bearer " + m_auth_token->AccessToken());
+    hdr.Add(m_auth_token->HttpHeaderBearer());
     hdr.Add("Content-Type: application/json");
-    hdr.Add("Expect:" );
-
-    std::string meta = constructMetaData(dirName, DIR_MIME, parentId);
 
     JsonResponse resp;
 
     debugPrintf("Attempting folder creation on cloud storage...\n");
+    Json data;
+    data.Add("name", Json(dirName));
         
     while( ShouldRetryCheck( ret = http.Post(
-            m_api_root_url+"/mounts/"+parentId+"/files/folder?path=" + http.Escape(""), dirName, &resp, hdr)
+            m_api_root_url+"mounts/"+parentId+"/files/folder?path=" + http.Escape("/"), data.Str(), &resp, hdr)
         )
     );
     
+    if ( ret >= 400 && ret < 500 ){
+        debugPrintf("uploadDirectory: Could not upload directory..%l\n", ret);
+        // This could mean the internet disconnected, or the server crashed or whatever
+        // Possibly exit the application?
+        
+    }else if (ret == 200){
+        debugPrintf("Folder created...\n");
+    }
+    
+    obj.Add("status", Json(ret));
+
+    return obj;
+}
+
+/**
+ * Get cloud available devices.
+ * Response:
+ * {
+   "places":[
+      {
+         "id":"6f6b2cd6",
+         "name":"Koofr",
+         "type":"device",
+         "origin":"hosted",
+         "online":true,
+         "owner":{
+            "id":"3c081d026",
+            "name":"",
+            "email":"",
+            "…"
+         },
+         "users":[
+            {
+               "id":"3c081d026",
+               "name":"",
+               "email":"",
+               "…"
+            ],
+            "groups":[ ],
+            "isShared":false,
+            "permissions":{
+               "COMMENT":true,
+               "CREATE_LINK":true,
+               "CREATE_RECEIVER":true,
+               "MOUNT":true,
+               "OWNER":true,
+               "…"
+            },
+            "spaceTotal":10240,
+            "spaceUsed":1,
+            "version":0,
+            "isPrimary":true,
+            "canWrite":true,
+            "canUpload":true,
+            "overQuota":false,
+            "almostOverQuota":false,
+            "userAdded":1680866249948,
+            "capabilities":{
+               "rawThumbnails":true,
+               "externalLinks":false,
+               "externalStatus":false,
+               "officeOnline":true,
+               "tags":"true…"
+            },
+            "deviceId":"94e9042e",
+            "isDir":true
+         },
+         {
+            "id":"f2b946a7-",
+            "name":"Google Drive",
+            "type":"device",
+            "origin":"googledrive",
+            "online":true,
+            "owner":{
+               "id":"324606",
+               "name":"",
+               "email":"",
+               "…"
+            },
+            "users":[
+               {
+                  "id":"3c08606",
+                  "name":"",
+                  "email":"",
+                  "…"
+               ],
+               "groups":[ ],
+               "isShared":false,
+               "permissions":{
+                  "COMMENT":true,
+                  "CREATE_LINK":false,
+                  "CREATE_RECEIVER":false,
+                  "MOUNT":true,
+                  "OWNER":true,
+                  "…"
+               },
+               "spaceTotal":15360,
+               "spaceUsed":100,
+               "version":0,
+               "isPrimary":false,
+               "canWrite":true,
+               "canUpload":true,
+               "overQuota":false,
+               "almostOverQuota":false,
+               "userAdded":1681849105766,
+               "capabilities":{
+                  "rawThumbnails":false,
+                  "externalLinks":true,
+                  "externalStatus":true,
+                  "officeOnline":false,
+                  "tags":"false…"
+               },
+               "deviceId":"-dd6e-4393-6201-",
+               "isDir":true
+            }
+         ]
+      }
+*/
+Json KoofrApiImpl::getRootMountId()
+{
+    long ret = -1;
+    Json obj;
+
+    Header hdr;
+    hdr.Add(m_auth_token->HttpHeaderBearer());
+    hdr.Add("Content-Type: application/json");
+
+    JsonResponse resp;
+
+    debugPrintf("Getting cloud storage devices...\n");
+
+    while( ShouldRetryCheck( ret = http.Get(m_api_root_url+"places", &resp, hdr)));
+    
     if ( ret >= 400 && ret < 500 )
     {
-        debugPrintf("uploadDirectory: Could not upload directory..%l\n", ret);
+        debugPrintf("rootMountId: Could not get cloud storage devices..%l\n", ret);
         // This could mean the internet disconnected, or the server crashed or whatever
         // Possibly exit the application?
         return obj;
     }
     
     obj = resp.Response();
-    if (obj.Has("id"))
+    if (obj.Has("places"))
     {
-        debugPrintf("Folder id is %d, %s\n", ret, obj["id"].Str().c_str());
-    }
-    else
-    {
-        debugPrintf("Folder creation failed with status %d\n", ret);
-    }
+        Json result;
+        int arrSize = obj["places"].AsArray().size();
+        for(int i=0; i < arrSize; i++)
+        {
+            Json device;
+                device.Add("root_id", obj["places"][i]["id"]);
+                //TODO keep storage space, etc
+
+            debugPrintf("   > Device {%s, %s}\n", obj["places"][i]["origin"].Str().c_str(), device["root_id"].Str().c_str());
+            
+            result.Add(obj["places"][i]["origin"].Str(), device);
+        }
+
+        return result;
+    }//TODO else?
 
     return obj;
 }
