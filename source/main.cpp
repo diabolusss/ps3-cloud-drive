@@ -98,21 +98,13 @@ class ApiConfiguration {
         std::string selectedApiStorage = "hosted"; //hosted - i.e. selectedApi storage
         std::string rootFolderId; //for hosted: "primary" for koofr api or "root" for google_api
         std::string deviceId     = "nill";
-        std::string remoteJsonId; //remote.json remote id 
+        std::string remoteJsonId; //remote.json remote file id 
         std::string last_sync = "0";
         std::string api_scope = "";
         u64 curr_sync_ts = 0;
 
         //transient values
-        std::string userType = "one"; // TODO rename str or replace to enum
-                                      // keep track of application sync mode: 
-                                      //    (1) first_time - new device and cloud storage have no APP folder
-                                      //                      configure and sync
-                                      //    (3) new_device - new device, but cloud storage have APP folder
-                                      //                      configure and sync
-                                      //    (2) configured - device was already configured and synced to cloud storage
-                                      //                 check synchronization status and re-sync
-                                      // @see #initCloudDrive() for details
+        SYNC_DEVICE_MODE syncDeviceMode = SYNC_DEVICE_MODE::MODE_FIRST_TIME; // @see #initCloudDrive() for details
 
         ApiConfiguration(){}
         ApiConfiguration(Json* config){
@@ -404,7 +396,7 @@ std::string isUserAuthenticatedReadConfig()
     std::string result = "invalid"; //synched status with OAuth->refresh()
     Json config;
     StdioFile file(appConfigFile);
-    //by default userType = 1 (already pre-inited)
+    //by default api.syncDeviceMode == ::first_time (pre-inited)
 
     if(!file.Exists())
     {
@@ -430,10 +422,10 @@ std::string isUserAuthenticatedReadConfig()
             debugPrintf("  > Config file has no current cloud storage auth data...\n");
             return result;
         }else{
-            API_CONF.userType = "two"; 
+            API_CONF.syncDeviceMode = SYNC_DEVICE_MODE::MODE_CONFIGURED;
         }
 
-        debugPrintf("  > Possible Token retrieved (userType 2):  \n\t%s \n   device_code: %s\n   scope: %s\n"
+        debugPrintf("  > Possible Token retrieved (syncDeviceMode 2[configured]):  \n\t%s \n   device_code: %s\n   scope: %s\n"
             , result.c_str(), API_CONF.deviceId.c_str(), API_CONF.api_scope.c_str()
         );
 
@@ -1178,12 +1170,12 @@ int initCloudDrive(void *arg)
         std::string oauthRefreshToken = isUserAuthenticatedReadConfig();
         if (oauthRefreshToken == "invalid") //missing or invalid config
         {
-            debugPrintf("  Authentication failed (usertype %s), registering (new) device...\n", API_CONF.userType.c_str());
+            debugPrintf("  Authentication failed (syncDeviceMode %d), registering (new) device...\n", API_CONF.syncDeviceMode);
             registerDevice();
         }
         
         storeConfig();
-        debugPrintf("< Authentication Phase Complete (usertype %s)\n", API_CONF.userType.c_str());
+        debugPrintf("< Authentication Phase Complete (syncDeviceMode %d)\n", API_CONF.syncDeviceMode);
     } //END of read APP config and check OAuth status
 
 //TESTING
@@ -1218,7 +1210,7 @@ if(API_CONF.selectedApi == "koofr"){
     
     msgDialogOpen2(dialog_type, "Performing Sync...", dialog_handler, NULL, NULL);
 
-    debugPrintf("Checking APP remote root folder existence (usertype %s)...\n", API_CONF.userType.c_str());
+    debugPrintf("Checking APP remote root folder existence (syncDeviceMode %d)...\n", API_CONF.syncDeviceMode);
    
     Json rootResource = api->checkIfRemoteResourceExists(APP_TITLE, DIR_MIME, "root"); //todo fix root - not portable
     //If user new but remote data exists
@@ -1228,8 +1220,8 @@ if(API_CONF.selectedApi == "koofr"){
         storeConfig();
 
         //TODO data may or may not exist - it can be empty root folder, decide on remote.json
-        if(API_CONF.userType == "one") API_CONF.userType = "three";
-        debugPrintf("Device APP directory (id:%s) was found in Cloud storage (userType %s)\n", API_CONF.rootFolderId.c_str(), API_CONF.userType.c_str());
+        if(API_CONF.syncDeviceMode == SYNC_DEVICE_MODE::MODE_FIRST_TIME) { API_CONF.syncDeviceMode = SYNC_DEVICE_MODE::MODE_NEW_DEVICE; }
+        debugPrintf("Device APP directory (id:%s) was found in Cloud storage (syncDeviceMode %d)\n", API_CONF.rootFolderId.c_str(), API_CONF.syncDeviceMode);
     }
     else
     {
@@ -1250,7 +1242,7 @@ if(API_CONF.selectedApi == "koofr"){
     }
     
     buildLocalResourceTree();
-    debugPrintf("Continuing (userType=%s)....\n", API_CONF.userType.c_str());
+    debugPrintf("Continuing (syncDeviceMode %d)....\n", API_CONF.syncDeviceMode);
     //NOTE: LRT = Local Resource Tree and RRT= Remote Resource Tree
     
     //First Time: App never run AND no data on Google Drive
@@ -1261,7 +1253,7 @@ if(API_CONF.selectedApi == "koofr"){
     //DONE: Update remote.json with all changes during uploading
     //DONE: Write remote.json to hard drive during changes
     //DONE: Upload remote.json to Google Drive
-    if(API_CONF.userType == "one")
+    if(API_CONF.syncDeviceMode == SYNC_DEVICE_MODE::MODE_FIRST_TIME)
     {
         StdioFile file(LOCAL_RESOURCE_CONFIG_FILENAME);
         *remoteResourceRoot = Json::ParseFile(file);
@@ -1284,7 +1276,7 @@ if(API_CONF.selectedApi == "koofr"){
     //TODO: Write all changes or uploads back to RRT and save to HDD
     //TODO: Write RRT to HDD
     //TODO: Upload RRT to Google Drive
-    if(API_CONF.userType == "two")
+    if(API_CONF.syncDeviceMode == SYNC_DEVICE_MODE::MODE_CONFIGURED)
     {
         debugPrintf("Reading local remote.json config.\n");
         StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
@@ -1298,7 +1290,7 @@ if(API_CONF.selectedApi == "koofr"){
             api->downloadChanges(&dialog_action);
         }else{
             debugPrintf("File %s doesn't exist\n", file.filepath().c_str());
-            API_CONF.userType = "three";
+            API_CONF.syncDeviceMode = SYNC_DEVICE_MODE::MODE_NEW_DEVICE;
         }
     }
 
@@ -1306,9 +1298,9 @@ if(API_CONF.selectedApi == "koofr"){
     //TODO: Build LRT and write to local.json
     //TODO: Download Remote Resource Tree and write to remote.json
     //TODO: Revert to Second Time scenario
-    if(API_CONF.userType == "three")
+    if(API_CONF.syncDeviceMode == SYNC_DEVICE_MODE::MODE_NEW_DEVICE)
     {
-        debugPrintf("Checking for remote.json (userType=3) on %s Cloud storage %s backend with root_id %s\n", API_CONF.selectedApi.c_str(), API_CONF.selectedApiStorage.c_str(), API_CONF.rootFolderId.c_str());
+        debugPrintf("Checking for remote.json (syncDeviceMode %d) on %s Cloud storage %s backend with root_id %s\n", API_CONF.syncDeviceMode, API_CONF.selectedApi.c_str(), API_CONF.selectedApiStorage.c_str(), API_CONF.rootFolderId.c_str());
         Json remoteJson = api->checkIfRemoteResourceExists("remote.json",JSON_MIME,API_CONF.rootFolderId);
         
         if(remoteJson.Has("id"))

@@ -36,7 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - TODO access m_prog_func_last_progress from *clientp @see ApiInterfaceImpl
  - TODO extract ApiConfiguration into separate file
  
-## [1.2.1.2] - 2023-04-10
+## [1.2.1.3] - 2023-04-23
+
+### Changed
+ 
+ - change userType string into syncDeviceMode enum
+
+## [1.2.1.2] - 2023-04-22
 
 ### Changed
  
@@ -47,14 +53,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  -             based on result preinits userType
  - review: fix config creation from scratch
 
-## [1.2.1.1] - 2023-04-10
+## [1.2.1.1] - 2023-04-15
 
 ### Changed
 
  - Koofr: get storage backend root id
  - refactor: change SelectedApiConf_t struct to ApiConfiguration class
 
-## [1.2.1] - 2023-04-10
+## [1.2.1] - 2023-04-11
 
 ### Changed
 
