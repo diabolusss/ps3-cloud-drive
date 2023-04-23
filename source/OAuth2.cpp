@@ -132,6 +132,8 @@ std::string OAuth2::Auth()
 
 /**
  * Refresh access token if available
+ * 
+ * @return invalid or valid
 */
 std::string OAuth2::Refresh()
 {

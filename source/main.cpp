@@ -65,7 +65,7 @@
     SDL_Surface *Load_Image(std::string filePath);
 
     void storeConfig();
-    std::string isUserAuthenticated();
+    std::string isUserAuthenticatedReadConfig();
 
     std::string getDirectoryIdByName(std::string folderName);
     void writeRemoteResourceChangesToFile();
@@ -93,6 +93,7 @@ APIInterface *api;
 /** app configuration file variables */
 class ApiConfiguration {
     public:
+        //values stored in file
         std::string selectedApi = "google"; //by default use google api (limited, yet for backward compatibility)
         std::string selectedApiStorage = "hosted"; //hosted - i.e. selectedApi storage
         std::string rootFolderId; //for hosted: "primary" for koofr api or "root" for google_api
@@ -101,6 +102,17 @@ class ApiConfiguration {
         std::string last_sync = "0";
         std::string api_scope = "";
         u64 curr_sync_ts = 0;
+
+        //transient values
+        std::string userType = "one"; // TODO rename str or replace to enum
+                                      // keep track of application sync mode: 
+                                      //    (1) first_time - new device and cloud storage have no APP folder
+                                      //                      configure and sync
+                                      //    (3) new_device - new device, but cloud storage have APP folder
+                                      //                      configure and sync
+                                      //    (2) configured - device was already configured and synced to cloud storage
+                                      //                 check synchronization status and re-sync
+                                      // @see #initCloudDrive() for details
 
         ApiConfiguration(){}
         ApiConfiguration(Json* config){
@@ -140,7 +152,7 @@ class ApiConfiguration {
         }
 
         bool wasRemoteCacheSynched(){
-            return !(remoteJsonId == "root" /*google api*/ || remoteJsonId == "primary" /*koofr api*/);
+            return !(remoteJsonId.empty() || remoteJsonId == "root" /*google api*/ || remoteJsonId == "primary" /*koofr api*/);
         }
         
 };
@@ -167,15 +179,6 @@ double progFuncLastProgress = 0.0;
 
 int appWidth = 1280;
 int appHeight = 720;
-
-//one
-//  First Time: App never run AND no data on Google Drive
-//two 
-//  Second Time: App ran before AND data possibly exists on Google Drive
-//three
-//  First Time: App is installed on a new system but Data exists on Google Drive 
-//@see initCloudDrive() for details
-std::string userType = "one";
 
 typedef struct {
 	uint32_t total;
@@ -345,20 +348,22 @@ void storeConfig()
     }
     file.OpenWithFlags(SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, 0644);    
 
+
     {//update only selected 'default_api' settings
         Json selectedApiConf;
-        if(!appConfig.AsObject().empty() && appConfig.Has("default_api")){
+        if(appConfig.AsObject().empty()){ appConfig = Json(); }
+            if(appConfig.Has("default_api") && appConfig.Has(API_CONF.selectedApi)){
             selectedApiConf = appConfig[API_CONF.selectedApi];
         }else{
-            appConfig.Add("default_api",    Json(API_CONF.selectedApi));                    
+            appConfig.Add("default_api",    Json(API_CONF.selectedApi));                                
         }
             selectedApiConf.Add("refresh_token",  Json(authToken->RefreshToken()));
             selectedApiConf.Add("device_id",      Json(authToken->DeviceCode())); //oauth2 device code
             selectedApiConf.Add("scope",          Json(authToken->getScope()));
-
+                               
         {//update only selected 'default_api'.places.'current_storage' settings
             Json selectedApiStorageConf;
-            if(appConfig.Has("current_storage")){
+            if(appConfig.Has("current_storage") && selectedApiConf.Has("places")){
                 selectedApiStorageConf = selectedApiConf["places"].Has(API_CONF.selectedApiStorage) 
                     ? selectedApiConf["places"][API_CONF.selectedApiStorage]
                     : Json()
@@ -369,8 +374,8 @@ void storeConfig()
                 selectedApiConf.Add("places", Json());                  
             }
 
-            selectedApiStorageConf.Add("last_sync",      Json(epochTsToString((time_t*) &API_CONF.curr_sync_ts))); //todo
-            //selectedApiStorageConf.Add("remote_fid",     Json(API_CONF.remoteJsonId));
+            selectedApiStorageConf.Add("last_sync",      Json(epochTsToString((time_t*) &API_CONF.curr_sync_ts))); //todo has no value right now
+            selectedApiStorageConf.Add("remote_fid",     Json(API_CONF.remoteJsonId));
             selectedApiStorageConf.Add("root_id",        Json(API_CONF.rootFolderId));
 
             selectedApiConf["places"].Add(API_CONF.selectedApiStorage, selectedApiStorageConf);
@@ -389,16 +394,18 @@ void storeConfig()
 }
 
 /**
- * Utility function that reads the config file for refresh token etc
- * @return "not_found" if file not found or corrupt else the refresh_token
+ * Utility function that reads the config file for application settings (i.e. refresh token, etc)
+ * 
+ * @return "invalid" - if file not found or corrupt, else the oauth->refresh will return
  * 
  */
-std::string isUserAuthenticated()
+std::string isUserAuthenticatedReadConfig()
 {
-    std::string result = "not_found";
+    std::string result = "invalid"; //synched status with OAuth->refresh()
     Json config;
     StdioFile file(appConfigFile);
-    
+    //by default userType = 1 (already pre-inited)
+
     if(!file.Exists())
     {
         //TODO try to read backup config file
@@ -409,38 +416,53 @@ std::string isUserAuthenticated()
     
     config = Json::ParseFile(file);
 
-    if(!config.AsObject().empty())
-    {
-        debugPrintf("  > Config file not empty, getting refresh token...\n");
-        API_CONF = (* new ApiConfiguration(&config)); // <- todo fix var to pointer
+    if(!config.AsObject().empty()){
+        debugPrintf("  > Config file not empty, getting api configuration...\n");
+        API_CONF = ApiConfiguration(&config);
 
-        debugPrintf("  > trying selected api '%s' config with storage '%s'\n", API_CONF.selectedApi.c_str(), API_CONF.selectedApiStorage.c_str());
-
-        //todo remove (configuration should be read already)
+        //todo review (configuration should be read already - a better way of handling that?)
         if(config.Has("refresh_token")){
-            result = config["refresh_token"].Str();            
-        }else if(config.Has("default_api")){
+            result = config["refresh_token"].Str();
+        }else if(config.Has("default_api") && config.Has(API_CONF.selectedApi)){
             result = config[API_CONF.selectedApi]["refresh_token"].Str();
         }
+        if(result.empty()){
+            debugPrintf("  > Config file has no current cloud storage auth data...\n");
+            return result;
+        }else{
+            API_CONF.userType = "two"; 
+        }
+
+        debugPrintf("  > Possible Token retrieved (userType 2):  \n\t%s \n   device_code: %s\n   scope: %s\n"
+            , result.c_str(), API_CONF.deviceId.c_str(), API_CONF.api_scope.c_str()
+        );
 
         if(API_CONF.rootFolderId.empty()){
-            debugPrintf("  > WARNING selected storage root_id unknown, retrieve it!\n");
+            debugPrintf("  >  WARN selected storage backend root_id unknown, should retrieve it!\n");
         }
-    }
+    }//END of parsing APP configuration
     
-    //init Oauth token based on default api
+    debugPrintf("  > Using selected api '%s' config with storage backend '%s'\n", API_CONF.selectedApi.c_str(), API_CONF.selectedApiStorage.c_str());
+
+    //init Oauth token based on selected api
     if(API_CONF.selectedApi == "google"){ 
         api = new GoogleApiImpl();
-        authToken           = api->m_auth_token;
-        remoteResourceRoot  = &api->m_remote_resource_root;
-
     }else if(API_CONF.selectedApi == "koofr"){ 
         api = new KoofrApiImpl();
-        authToken           = api->m_auth_token;
-        remoteResourceRoot  = &api->m_remote_resource_root;
+    }//else TODO - critical error (unexpected data)
+    else{
+        return "invalid";
     }
+    //init oauth auth data
+    api->m_auth_token->setRefreshToken(result);
+    api->m_auth_token->setScope(API_CONF.api_scope);
+    api->m_auth_token->setDeviceCode(API_CONF.deviceId);
+
+    // shortcut links (todo eliminate)
+    authToken           = api->m_auth_token;
+    remoteResourceRoot  = &api->m_remote_resource_root;
             
-    return result;
+    return api->m_auth_token->Refresh();
 }
 
 int transferProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
@@ -724,6 +746,7 @@ void uploadChanges()
     }
     else if(syncJson == 1)
     {
+        //todo it may be deleted remotely or contain wrong value locally and update will fail here
         debugPrintf("Updating remote.json on the server...\n" );
         api->uploadFile(REMOTE_RESOURCE_CONFIG_FILENAME,"remote.json",JSON_MIME,API_CONF.rootFolderId,API_CONF.remoteJsonId);
     }
@@ -1144,46 +1167,33 @@ void buildLocalResourceTree()
  */
 int initCloudDrive(void *arg)
 {
-    debugPrintf("Checking if User is Authenticated...\n");
-    std::string authStatus = isUserAuthenticated();
-    
     SDL_Surface *checkingAuthText = NULL;
-    checkingAuthText = TTF_RenderText_Blended( Sans, "Checking if User is authenticated...", GREY);
-    draw_surface(screen, image, 0, 0);
-    draw_surface(screen, checkingAuthText, (appWidth - checkingAuthText->w) / 2, (70 * appHeight) / 100);
-    
-    if (authStatus == "not_found")
     {
-        debugPrintf("  User is not authenticated (userType 1), starting Authentication...\n");
-        registerDevice();
-    }
-    else
-    {
-        userType = "two";
-        debugPrintf("  Possible Token Read from file (userType 2):  \n\t%s \n   device_code: %s\n   scope: %s\n"
-            , authStatus.c_str(), API_CONF.deviceId.c_str(), API_CONF.api_scope.c_str()
-        );
-
-        authToken->setRefreshToken(authStatus);
-        authToken->setDeviceCode(API_CONF.deviceId);
-        authToken->setScope(API_CONF.api_scope);      
-        if (authToken->Refresh() != "valid")
+        debugPrintf("Checking if User is Authenticated...\n");
+        
+        checkingAuthText = TTF_RenderText_Blended( Sans, "Checking if User is authenticated...", GREY);
+        draw_surface(screen, image, 0, 0);
+        draw_surface(screen, checkingAuthText, (appWidth - checkingAuthText->w) / 2, (70 * appHeight) / 100);
+        
+        std::string oauthRefreshToken = isUserAuthenticatedReadConfig();
+        if (oauthRefreshToken == "invalid") //missing or invalid config
         {
-            debugPrintf("  Token Read from file was invalid, need to Re-Authenticate\n");
+            debugPrintf("  Authentication failed (usertype %s), registering (new) device...\n", API_CONF.userType.c_str());
             registerDevice();
         }
-    }
-    
-    storeConfig();
-    debugPrintf("< Authentication Phase Complete, checking remote root folder existence\n");
+        
+        storeConfig();
+        debugPrintf("< Authentication Phase Complete (usertype %s)\n", API_CONF.userType.c_str());
+    } //END of read APP config and check OAuth status
 
 //TESTING
+if(API_CONF.selectedApi == "koofr"){
     //get app folder root id for selected api
     if(API_CONF.rootFolderId.empty()){        
         Json _res = api->getRootMountId();        
         if(_res.Has(API_CONF.selectedApiStorage)){
             API_CONF.rootFolderId = _res[API_CONF.selectedApiStorage]["root_id"].Str();
-            debugPrintf("Cloud root directory id %s\n", API_CONF.rootFolderId.c_str());
+            debugPrintf(" Cloud storage backend %s root_id = %s\n", API_CONF.selectedApiStorage, API_CONF.rootFolderId.c_str());
             storeConfig();
         }//TODO else
         //   if selected not hosted - try it (core storage)
@@ -1195,7 +1205,7 @@ int initCloudDrive(void *arg)
     if(_res.Has("status") && _res["status"].Int() == 200){
 
     }
-//END of TESTING   
+}//END of TESTING   
 
     syncing = 1;
     
@@ -1207,18 +1217,23 @@ int initCloudDrive(void *arg)
     draw_surface(screen, userAuthedText, (appWidth - userAuthedText->w) / 2, (70 * appHeight) / 100);
     
     msgDialogOpen2(dialog_type, "Performing Sync...", dialog_handler, NULL, NULL);
-    
+
+    debugPrintf("Checking APP remote root folder existence (usertype %s)...\n", API_CONF.userType.c_str());
+   
+    Json rootResource = api->checkIfRemoteResourceExists(APP_TITLE, DIR_MIME, "root"); //todo fix root - not portable
     //If user new but remote data exists
-    Json rootResource = api->checkIfRemoteResourceExists(APP_TITLE, DIR_MIME, API_CONF.rootFolderId);
-    if(rootResource.Has("id"))
+    if(rootResource.Has("id"))//root folder found - will return the first match if multiple found
     {
         API_CONF.rootFolderId = rootResource["id"].Str();
-        debugPrintf("User has previous data on Google Drive (userType 3) with id %s\n",API_CONF.rootFolderId.c_str());
-        if(userType == "one") userType = "three";
+        storeConfig();
+
+        //TODO data may or may not exist - it can be empty root folder, decide on remote.json
+        if(API_CONF.userType == "one") API_CONF.userType = "three";
+        debugPrintf("Device APP directory (id:%s) was found in Cloud storage (userType %s)\n", API_CONF.rootFolderId.c_str(), API_CONF.userType.c_str());
     }
     else
     {
-        debugPrintf("User has no previous data on Google Drive\n");
+        debugPrintf("This device has no previous data on Cloud storage\n");
         Json rtId;
         rtId = api->uploadDirectory(APP_TITLE, API_CONF.rootFolderId);
         
@@ -1235,7 +1250,7 @@ int initCloudDrive(void *arg)
     }
     
     buildLocalResourceTree();
-    debugPrintf("Continuing (userType=%s)....\n", userType.c_str());
+    debugPrintf("Continuing (userType=%s)....\n", API_CONF.userType.c_str());
     //NOTE: LRT = Local Resource Tree and RRT= Remote Resource Tree
     
     //First Time: App never run AND no data on Google Drive
@@ -1246,7 +1261,7 @@ int initCloudDrive(void *arg)
     //DONE: Update remote.json with all changes during uploading
     //DONE: Write remote.json to hard drive during changes
     //DONE: Upload remote.json to Google Drive
-    if(userType == "one")
+    if(API_CONF.userType == "one")
     {
         StdioFile file(LOCAL_RESOURCE_CONFIG_FILENAME);
         *remoteResourceRoot = Json::ParseFile(file);
@@ -1269,7 +1284,7 @@ int initCloudDrive(void *arg)
     //TODO: Write all changes or uploads back to RRT and save to HDD
     //TODO: Write RRT to HDD
     //TODO: Upload RRT to Google Drive
-    if(userType == "two")
+    if(API_CONF.userType == "two")
     {
         debugPrintf("Reading local remote.json config.\n");
         StdioFile file(REMOTE_RESOURCE_CONFIG_FILENAME);
@@ -1283,7 +1298,7 @@ int initCloudDrive(void *arg)
             api->downloadChanges(&dialog_action);
         }else{
             debugPrintf("File %s doesn't exist\n", file.filepath().c_str());
-            userType = "three";
+            API_CONF.userType = "three";
         }
     }
 
@@ -1291,9 +1306,9 @@ int initCloudDrive(void *arg)
     //TODO: Build LRT and write to local.json
     //TODO: Download Remote Resource Tree and write to remote.json
     //TODO: Revert to Second Time scenario
-    if(userType == "three")
+    if(API_CONF.userType == "three")
     {
-        debugPrintf("Checking for remote.json (userType=3) on Google Drive with root_id %s\n",API_CONF.rootFolderId.c_str());
+        debugPrintf("Checking for remote.json (userType=3) on %s Cloud storage %s backend with root_id %s\n", API_CONF.selectedApi.c_str(), API_CONF.selectedApiStorage.c_str(), API_CONF.rootFolderId.c_str());
         Json remoteJson = api->checkIfRemoteResourceExists("remote.json",JSON_MIME,API_CONF.rootFolderId);
         
         if(remoteJson.Has("id"))

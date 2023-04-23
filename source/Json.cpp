@@ -271,9 +271,17 @@ Json::Type Json::DataType() const
 	return static_cast<Type>( ::json_object_get_type( m_json ) ) ;
 }
 
+template <>
+bool Json::Is<Json::Object>() const
+{
+	if( m_json == 0 ) debugPrintf("Jsonisobj m_json is null\n");
+	return ::json_object_is_type( m_json, json_type_object ) ;
+}
+
 Json::Object Json::AsObject() const
 {
 	Object result ;
+	if(!Is<Json::Object>()){ return result; }
 	
 	json_object_object_foreach( m_json, key, val )
 	{
@@ -283,29 +291,25 @@ Json::Object Json::AsObject() const
 	return result ;
 }
 
-template <>
-bool Json::Is<Json::Object>() const
-{
-	if( m_json == 0 ) debugPrintf("Jsonisobj m_json is null\n");
-	return ::json_object_is_type( m_json, json_type_object ) ;
-}
-
-Json::Array Json::AsArray() const
-{
-	std::size_t count = ::json_object_array_length( m_json ) ;
-	Array result ;
-	
-	for ( std::size_t i = 0 ; i < count ; ++i )
-		result.push_back( Json( ::json_object_array_get_idx( m_json, i ) ) ) ;
-	
-	return result ;
-}
 
 template <>
 bool Json::Is<Json::Array>() const
 {
 	if( m_json == 0 ) debugPrintf("JsonArray m_json is null\n");
 	return ::json_object_is_type( m_json, json_type_array ) ;
+}
+
+Json::Array Json::AsArray() const
+{
+	Array result ;
+
+	if(!Is<Json::Array>()){ return result; }
+	std::size_t count = ::json_object_array_length( m_json ) ;
+	
+	for ( std::size_t i = 0 ; i < count ; ++i )
+		result.push_back( Json( ::json_object_array_get_idx( m_json, i ) ) ) ;
+	
+	return result ;
 }
 
 Json Json::FindInArray( const std::string& key, const std::string& value ) const

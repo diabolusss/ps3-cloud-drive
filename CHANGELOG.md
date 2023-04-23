@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - TODO access m_prog_func_last_progress from *clientp @see ApiInterfaceImpl
  - TODO extract ApiConfiguration into separate file
  
+## [1.2.1.2] - 2023-04-10
+
+### Changed
+ 
+ - google api - retest (working)
+ - json: objects null safety
+ - review: userType - synchronization flow
+ -             isUserAuthenticated reads config and refreshes oauth, 
+ -             based on result preinits userType
+ - review: fix config creation from scratch
+
 ## [1.2.1.1] - 2023-04-10
 
 ### Changed

@@ -33,7 +33,8 @@
  * 
  * @param resourceTitle the title of the resource to find
  * @param mimeType the mimetype of the resource
- * @param parentId the parentid of the resource's parent (if you don't know this, this function is useless, unless you're searching under root)
+ * @param parentId the parentid of the resource's parent (if you don't know this, this function is useless, 
+ *                  unless you're searching under root)
  * @return the resource object, otherwise null
  */
 Json GoogleApiImpl::checkIfRemoteResourceExists(std::string resourceTitle,std::string mimeType,std::string parentId)
